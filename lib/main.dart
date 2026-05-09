@@ -540,7 +540,8 @@ class _PageContent extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final size = MediaQuery.sizeOf(context);
-    final buttonSize = math.min(size.width * 0.58, 296.0);
+    final buttonSize = size.width * 0.88;
+    final buttonHeight = size.width * 1.0;
     final topGlow = isDark
         ? colorScheme.primary.withValues(alpha: 0.14)
         : colorScheme.primary.withValues(alpha: 0.10);
@@ -611,7 +612,7 @@ class _PageContent extends StatelessWidget {
                       : SizedBox(
                           key: const ValueKey('picker-stage'),
                           width: buttonSize,
-                          height: buttonSize,
+                          height: buttonHeight,
                           child: _MorphingPhotoButton(
                             onTap: onPickImage,
                             label: 'Выбрать фото',
@@ -631,19 +632,16 @@ class _PageContent extends StatelessWidget {
                   children: [
                     SliderTheme(
                       data: SliderThemeData(
-                        trackHeight: 16,
+                        trackHeight: 36,
                         thumbShape: const RoundSliderThumbShape(
-                          enabledThumbRadius: 12,
+                          enabledThumbRadius: 16,
+                          disabledThumbRadius: 16,
                         ),
-                        overlayShape: const RoundSliderOverlayShape(
-                          overlayRadius: 24,
-                        ),
+                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 22),
                         activeTrackColor: colorScheme.primary,
                         inactiveTrackColor: colorScheme.surfaceContainerHighest,
-                        thumbColor: colorScheme.primary,
-                        overlayColor: colorScheme.primary.withValues(
-                          alpha: 0.12,
-                        ),
+                        thumbColor: colorScheme.onPrimary,
+                        overlayColor: colorScheme.primary.withValues(alpha: 0.12),
                         trackShape: const RoundedRectSliderTrackShape(),
                       ),
                       child: Slider(
@@ -679,25 +677,24 @@ class _PageContent extends StatelessWidget {
                 badgeColor: colorScheme.secondaryContainer,
                 badgeTextColor: colorScheme.onSecondaryContainer,
                 child: SliderTheme(
-                  data: SliderThemeData(
-                    trackHeight: 16,
-                    thumbShape: const RoundSliderThumbShape(
-                      enabledThumbRadius: 12,
-                    ),
-                    overlayShape: const RoundSliderOverlayShape(
-                      overlayRadius: 24,
-                    ),
-                    activeTrackColor: colorScheme.secondaryContainer,
-                    inactiveTrackColor: colorScheme.surfaceContainerHighest,
-                    thumbColor: colorScheme.secondaryContainer,
-                    overlayColor: colorScheme.secondary.withValues(alpha: 0.12),
-                    trackShape: const RoundedRectSliderTrackShape(),
-                  ),
-                  child: Slider(
-                    value: (downscaleFactor - 1) / 7,
-                    onChanged: (value) => onDownscaleChanged(1 + value * 7),
-                  ),
-                ),
+                        data: SliderThemeData(
+                          trackHeight: 36,
+                          thumbShape: const RoundSliderThumbShape(
+                            enabledThumbRadius: 16,
+                            disabledThumbRadius: 16,
+                          ),
+                          overlayShape: const RoundSliderOverlayShape(overlayRadius: 22),
+                          activeTrackColor: colorScheme.secondary,
+                          inactiveTrackColor: colorScheme.surfaceContainerHighest,
+                          thumbColor: colorScheme.onSecondary,
+                          overlayColor: colorScheme.secondary.withValues(alpha: 0.12),
+                          trackShape: const RoundedRectSliderTrackShape(),
+                        ),
+                        child: Slider(
+                          value: (downscaleFactor - 1) / 7,
+                          onChanged: (value) => onDownscaleChanged(1 + value * 7),
+                        ),
+                      ),
               ),
               if (needsRefresh) ...[
                 const SizedBox(height: 18),
@@ -1286,36 +1283,26 @@ class _MorphingPhotoButtonState extends State<_MorphingPhotoButton>
                       ),
                       Padding(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 22,
-                          vertical: 30,
+                          horizontal: 16,
+                          vertical: 24,
                         ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.add_a_photo_outlined,
-                              size: 52,
-                              color: widget.foregroundColor,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              widget.label,
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.robotoFlex(
-                                textStyle: TextStyle(
-                                  fontSize: 28,
-                                  color: widget.foregroundColor,
-                                  fontVariations: const [
-                                    FontVariation('wght', 900),
-                                    FontVariation('wdth', 150),
-                                  ],
-                                  height: 1.05,
-                                  letterSpacing: -0.5,
-                                ),
+                        child: Center(
+                          child: Text(
+                            widget.label.toUpperCase(),
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.robotoFlex(
+                              textStyle: TextStyle(
+                                fontSize: 58,
+                                color: widget.foregroundColor,
+                                fontVariations: const [
+                                  FontVariation('wght', 900),
+                                  FontVariation('wdth', 150),
+                                ],
+                                height: 0.95,
+                                letterSpacing: -1.5,
                               ),
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ],
