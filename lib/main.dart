@@ -1,9 +1,11 @@
 import 'dart:math' as math;
-import 'dart:typed_data';
+import 'dart:ui' show FontVariation, lerpDouble;
 
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:gal/gal.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
@@ -15,142 +17,173 @@ void main() {
 class ShakalApp extends StatelessWidget {
   const ShakalApp({super.key});
 
-  static const _fallbackSeed = Color(0xFF7B61FF);
-  static const _appTitle = '\u0428\u041a\u041b';
+  static const _fallbackSeed = Color(0xFFB59CFF);
 
   @override
   Widget build(BuildContext context) {
     return DynamicColorBuilder(
       builder: (lightDynamic, darkDynamic) {
         final lightScheme =
-            (lightDynamic ??
-                    ColorScheme.fromSeed(
-                      seedColor: _fallbackSeed,
-                      brightness: Brightness.light,
-                    ))
-                .harmonized();
+            lightDynamic?.harmonized() ??
+            ColorScheme.fromSeed(
+              seedColor: _fallbackSeed,
+              brightness: Brightness.light,
+            );
         final darkScheme =
-            (darkDynamic ??
-                    ColorScheme.fromSeed(
-                      seedColor: _fallbackSeed,
-                      brightness: Brightness.dark,
-                    ))
-                .harmonized();
+            darkDynamic?.harmonized() ??
+            ColorScheme.fromSeed(
+              seedColor: _fallbackSeed,
+              brightness: Brightness.dark,
+            );
+        final lightTheme = _buildTheme(lightScheme);
+        final darkTheme = _buildTheme(darkScheme);
 
         return MaterialApp(
           debugShowCheckedModeBanner: false,
-          title: _appTitle,
-          theme: _buildTheme(lightScheme, Brightness.light),
-          darkTheme: _buildTheme(darkScheme, Brightness.dark),
-          home: const ShakalHomePage(),
+          title: 'ШКЛ',
+          theme: lightTheme,
+          darkTheme: darkTheme,
+          home: ShakalHomePage(lightTheme: lightTheme, darkTheme: darkTheme),
         );
       },
     );
   }
 
-  ThemeData _buildTheme(ColorScheme scheme, Brightness brightness) {
+  ThemeData _buildTheme(ColorScheme scheme) {
+    final brightness = scheme.brightness;
+
     final base = ThemeData(
       useMaterial3: true,
       brightness: brightness,
       colorScheme: scheme,
-      scaffoldBackgroundColor: Color.alphaBlend(
-        scheme.primary.withValues(
-          alpha: brightness == Brightness.light ? 0.05 : 0.12,
-        ),
-        scheme.surface,
-      ),
+      scaffoldBackgroundColor: scheme.surface,
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         backgroundColor: scheme.inverseSurface,
-        contentTextStyle: TextStyle(color: scheme.onInverseSurface),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      ),
-      sliderTheme: SliderThemeData(
-        trackHeight: 14,
-        activeTrackColor: scheme.primary,
-        inactiveTrackColor: scheme.primaryContainer.withValues(
-          alpha: brightness == Brightness.light ? 0.72 : 0.42,
+        contentTextStyle: TextStyle(
+          color: scheme.onInverseSurface,
+          fontWeight: FontWeight.w600,
         ),
-        thumbColor: scheme.onPrimary,
-        overlayColor: scheme.primary.withValues(alpha: 0.12),
-        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 12),
-        overlayShape: const RoundSliderOverlayShape(overlayRadius: 26),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       ),
+      iconTheme: IconThemeData(color: scheme.primary),
     );
 
     return base.copyWith(
       textTheme: base.textTheme.copyWith(
-        displaySmall: base.textTheme.displaySmall?.copyWith(
-          fontWeight: FontWeight.w900,
-          letterSpacing: -1.8,
+        headlineLarge: base.textTheme.headlineLarge?.copyWith(
+          fontWeight: FontWeight.w800,
+          letterSpacing: -1.4,
           height: 1.0,
         ),
-        headlineSmall: base.textTheme.headlineSmall?.copyWith(
+        headlineMedium: base.textTheme.headlineMedium?.copyWith(
           fontWeight: FontWeight.w800,
-          letterSpacing: -0.8,
+          letterSpacing: -1.0,
         ),
         titleLarge: base.textTheme.titleLarge?.copyWith(
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w700,
         ),
         titleMedium: base.textTheme.titleMedium?.copyWith(
           fontWeight: FontWeight.w700,
         ),
+        bodyLarge: base.textTheme.bodyLarge?.copyWith(height: 1.25),
       ),
     );
   }
 }
 
 class ShakalHomePage extends StatefulWidget {
-  const ShakalHomePage({super.key});
+  const ShakalHomePage({
+    super.key,
+    required this.lightTheme,
+    required this.darkTheme,
+  });
+
+  final ThemeData lightTheme;
+  final ThemeData darkTheme;
 
   @override
   State<ShakalHomePage> createState() => _ShakalHomePageState();
 }
 
-class _ShakalHomePageState extends State<ShakalHomePage> {
+class _ShakalHomePageState extends State<ShakalHomePage>
+    with TickerProviderStateMixin {
   static const _albumName = 'Zybuchiy Shakal';
-  static const _pickPhoto =
-      '\u0412\u044b\u0431\u0440\u0430\u0442\u044c \u0444\u043e\u0442\u043e';
-  static const _changePhoto =
-      '\u0421\u043c\u0435\u043d\u0438\u0442\u044c \u0444\u043e\u0442\u043e';
-  static const _openGallery =
-      '\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0433\u0430\u043b\u0435\u0440\u0435\u044e';
-  static const _replace = '\u0417\u0430\u043c\u0435\u043d\u0438\u0442\u044c';
-  static const _process =
-      '\u0417\u0410\u0428\u0410\u041a\u0410\u041b\u0418\u0422\u042c';
-  static const _processing = '\u0428\u0410\u041a\u0410\u041b\u0418\u041c...';
-  static const _save = '\u0421\u041e\u0425\u0420\u0410\u041d\u0418\u0422\u042c';
-  static const _saving =
-      '\u0421\u041e\u0425\u0420\u0410\u041d\u042f\u0415\u041c...';
 
   final ImagePicker _picker = ImagePicker();
+  final ScrollController _scrollController = TrackingScrollController();
+
+  late final AnimationController _themeRevealController;
 
   Uint8List? _sourceBytes;
   Uint8List? _processedBytes;
   String? _fileName;
   int? _sourceWidth;
   int? _sourceHeight;
-  int? _processedWidth;
-  int? _processedHeight;
-  double _quality = 48;
-  double _downscaleFactor = 2.4;
+  double _quality = 50;
+  double _downscaleFactor = 5.2;
   bool _isProcessing = false;
   bool _isSaving = false;
   bool _needsRefresh = false;
 
+  bool _isDark = true;
+  bool _isRevealActive = false;
+  bool _pendingDarkValue = false;
+  Offset _revealCenter = Offset.zero;
+
   bool get _hasImage => _sourceBytes != null;
   Uint8List? get _previewBytes => _processedBytes ?? _sourceBytes;
-  String get _qualityLabel => '${_quality.round()}%';
-  String get _downscaleLabel => 'x${_downscaleFactor.toStringAsFixed(1)}';
-  String get _sourceSizeLabel => _dimensionsLabel(_sourceWidth, _sourceHeight);
-  String get _processedSizeLabel =>
-      _dimensionsLabel(_processedWidth, _processedHeight);
 
-  static String _dimensionsLabel(int? width, int? height) {
-    if (width == null || height == null) {
-      return '\u0411\u0435\u0437 \u0440\u0430\u0437\u043c\u0435\u0440\u0430';
+  ThemeData get _activeTheme => _isDark ? widget.darkTheme : widget.lightTheme;
+
+  ThemeData get _targetTheme =>
+      _pendingDarkValue ? widget.darkTheme : widget.lightTheme;
+
+  String get _qualityLabel => '${_quality.round()}%';
+
+  String get _artifactLabel {
+    if (_downscaleFactor < 2.4) {
+      return 'Низкая';
     }
+    if (_downscaleFactor < 4.4) {
+      return 'Средняя';
+    }
+    if (_downscaleFactor < 6.4) {
+      return 'Высокая';
+    }
+    return 'Жёсткая';
+  }
+
+  String get _previewBadge =>
+      _processedBytes == null ? 'Оригинал' : 'Результат';
+
+  String get _previewDimensions {
+    if (_sourceWidth == null || _sourceHeight == null) {
+      return 'Без размера';
+    }
+    final width = _processedBytes == null
+        ? _sourceWidth!
+        : math.max(1, (_sourceWidth! / _downscaleFactor).round());
+    final height = _processedBytes == null
+        ? _sourceHeight!
+        : math.max(1, (_sourceHeight! / _downscaleFactor).round());
     return '${width}x$height';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _themeRevealController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 760),
+    );
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _themeRevealController.dispose();
+    super.dispose();
   }
 
   Future<void> _pickImage() async {
@@ -163,12 +196,7 @@ class _ShakalHomePageState extends State<ShakalHomePage> {
       final bytes = await pickedFile.readAsBytes();
       final decoded = img.decodeImage(bytes);
       if (decoded == null) {
-        _showSnack(
-          '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c '
-          '\u043f\u0440\u043e\u0447\u0438\u0442\u0430\u0442\u044c '
-          '\u0432\u044b\u0431\u0440\u0430\u043d\u043d\u043e\u0435 '
-          '\u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435.',
-        );
+        _showSnack('Не удалось прочитать выбранное изображение.');
         return;
       }
 
@@ -182,30 +210,18 @@ class _ShakalHomePageState extends State<ShakalHomePage> {
         _fileName = pickedFile.name;
         _sourceWidth = decoded.width;
         _sourceHeight = decoded.height;
-        _processedWidth = null;
-        _processedHeight = null;
         _needsRefresh = false;
       });
 
-      _showSnack(
-        '\u0424\u043e\u0442\u043e \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043d\u043e. '
-        '\u0422\u0435\u043f\u0435\u0440\u044c \u043c\u043e\u0436\u043d\u043e '
-        '\u0437\u0430\u0448\u0430\u043a\u0430\u043b\u0438\u0442\u044c.',
-      );
+      _showSnack('Фото загружено.');
     } catch (_) {
-      _showSnack(
-        '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c '
-        '\u043e\u0442\u043a\u0440\u044b\u0442\u044c \u0433\u0430\u043b\u0435\u0440\u0435\u044e.',
-      );
+      _showSnack('Не удалось открыть галерею.');
     }
   }
 
   Future<void> _processImage() async {
     if (_sourceBytes == null) {
-      _showSnack(
-        '\u0421\u043d\u0430\u0447\u0430\u043b\u0430 '
-        '\u0432\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0444\u043e\u0442\u043e.',
-      );
+      _showSnack('Сначала выбери фото.');
       return;
     }
 
@@ -233,7 +249,7 @@ class _ShakalHomePageState extends State<ShakalHomePage> {
               decoded,
               width: targetWidth,
               height: targetHeight,
-              interpolation: _downscaleFactor >= 2.5
+              interpolation: _downscaleFactor >= 4.8
                   ? img.Interpolation.nearest
                   : img.Interpolation.linear,
             )
@@ -249,21 +265,12 @@ class _ShakalHomePageState extends State<ShakalHomePage> {
 
       setState(() {
         _processedBytes = jpgBytes;
-        _processedWidth = resized.width;
-        _processedHeight = resized.height;
         _needsRefresh = false;
       });
 
-      _showSnack(
-        '\u0428\u0430\u043a\u0430\u043b\u0438\u0437\u0430\u0446\u0438\u044f '
-        '\u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u0430.',
-      );
+      _showSnack('Шакализация завершена.');
     } catch (_) {
-      _showSnack(
-        '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c '
-        '\u043e\u0431\u0440\u0430\u0431\u043e\u0442\u0430\u0442\u044c '
-        '\u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435.',
-      );
+      _showSnack('Не удалось обработать изображение.');
     } finally {
       if (mounted) {
         setState(() {
@@ -275,10 +282,7 @@ class _ShakalHomePageState extends State<ShakalHomePage> {
 
   Future<void> _saveImage() async {
     if (_processedBytes == null) {
-      _showSnack(
-        '\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u043d\u0430\u0436\u043c\u0438\u0442\u0435 '
-        '\u00ab$_process\u00bb.',
-      );
+      _showSnack('Сначала нажми «Зашакалить».');
       return;
     }
 
@@ -289,35 +293,23 @@ class _ShakalHomePageState extends State<ShakalHomePage> {
     try {
       final hasAccess = await Gal.requestAccess(toAlbum: true);
       if (!hasAccess) {
-        _showSnack(
-          '\u041d\u0435\u0442 \u0434\u043e\u0441\u0442\u0443\u043f\u0430 '
-          '\u043a \u0433\u0430\u043b\u0435\u0440\u0435\u0435.',
-        );
+        _showSnack('Нет доступа к галерее.');
         return;
       }
 
-      final imageName = 'shakal_${DateTime.now().millisecondsSinceEpoch}';
       await Gal.putImageBytes(
         _processedBytes!,
         album: _albumName,
-        name: imageName,
+        name: 'shkl_${DateTime.now().millisecondsSinceEpoch}',
       );
 
       if (!mounted) {
         return;
       }
 
-      _showSnack(
-        '\u0418\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435 '
-        '\u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e '
-        '\u0432 \u0433\u0430\u043b\u0435\u0440\u0435\u044e.',
-      );
+      _showSnack('Изображение сохранено.');
     } catch (_) {
-      _showSnack(
-        '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c '
-        '\u0441\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c '
-        '\u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435.',
-      );
+      _showSnack('Не удалось сохранить изображение.');
     } finally {
       if (mounted) {
         setState(() {
@@ -341,6 +333,35 @@ class _ShakalHomePageState extends State<ShakalHomePage> {
     });
   }
 
+  Future<void> _toggleTheme(Offset globalPosition) async {
+    if (_isRevealActive) {
+      return;
+    }
+
+    final renderBox = context.findRenderObject() as RenderBox?;
+    if (renderBox == null) {
+      return;
+    }
+
+    HapticFeedback.lightImpact();
+
+    setState(() {
+      _revealCenter = renderBox.globalToLocal(globalPosition);
+      _pendingDarkValue = !_isDark;
+      _isRevealActive = true;
+    });
+
+    await _themeRevealController.forward(from: 0);
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _isDark = _pendingDarkValue;
+      _isRevealActive = false;
+    });
+  }
+
   void _showSnack(String message) {
     if (!mounted) {
       return;
@@ -352,588 +373,682 @@ class _ShakalHomePageState extends State<ShakalHomePage> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
+  double _maxRevealRadius(Size size, Offset center) {
+    final dx = math.max(center.dx, size.width - center.dx);
+    final dy = math.max(center.dy, size.height - center.dy);
+    return math.sqrt(dx * dx + dy * dy);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final heroPurple = const Color(
-      0xFFAC8FFF,
-    ).harmonizeWith(colorScheme.primary);
+    final size = MediaQuery.sizeOf(context);
 
     return Scaffold(
-      body: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              colorScheme.surface,
-              Color.alphaBlend(
-                heroPurple.withValues(alpha: 0.08),
-                colorScheme.surface,
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: _ThemedLayer(
+              theme: _activeTheme,
+              ignorePointer: false,
+              child: _PageContent(
+                scrollController: _scrollController,
+                hasImage: _hasImage,
+                previewBytes: _previewBytes,
+                previewBadge: _previewBadge,
+                previewDimensions: _previewDimensions,
+                fileName: _fileName,
+                quality: _quality,
+                qualityLabel: _qualityLabel,
+                downscaleFactor: _downscaleFactor,
+                artifactLabel: _artifactLabel,
+                isDark: _isDark,
+                needsRefresh: _needsRefresh,
+                onPickImage: _pickImage,
+                onReplaceImage: _pickImage,
+                onThemeTap: _toggleTheme,
+                onQualityChanged: _updateQuality,
+                onDownscaleChanged: _updateDownscale,
               ),
-              Color.alphaBlend(
-                colorScheme.primary.withValues(alpha: 0.06),
-                colorScheme.surface,
-              ),
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _HeroHeader(onPickImage: _pickImage, hasImage: _hasImage),
-                const SizedBox(height: 22),
-                _PreviewCard(
-                  imageBytes: _previewBytes,
-                  fileName: _fileName,
-                  originalSize: _sourceSizeLabel,
-                  processedSize: _processedSizeLabel,
-                  hasProcessedVersion: _processedBytes != null,
-                  needsRefresh: _needsRefresh,
-                  onPickImage: _pickImage,
-                ),
-                const SizedBox(height: 22),
-                _SurfaceCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _SliderSection(
-                        title: 'Compression Quality',
-                        valueLabel: _qualityLabel,
-                        caption:
-                            '\u041d\u0438\u0436\u0435 \u043a\u0430\u0447\u0435\u0441\u0442\u0432\u043e JPG '
-                            '\u2014 \u0431\u043e\u043b\u044c\u0448\u0435 '
-                            '\u0430\u0440\u0442\u0435\u0444\u0430\u043a\u0442\u043e\u0432 '
-                            '\u0438 \u0441\u0438\u043b\u044c\u043d\u0435\u0435 '
-                            '\u0448\u0430\u043a\u0430\u043b-\u044d\u0444\u0444\u0435\u043a\u0442.',
-                        value: _quality,
-                        min: 0,
-                        max: 100,
-                        divisions: 100,
-                        onChanged: _updateQuality,
-                      ),
-                      const SizedBox(height: 18),
-                      Divider(
-                        color: colorScheme.outlineVariant.withValues(
-                          alpha: 0.35,
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                      _SliderSection(
-                        title: 'Downscale factor',
-                        valueLabel: _downscaleLabel,
-                        caption:
-                            '\u0423\u043c\u0435\u043d\u044c\u0448\u0430\u0435\u0442 '
-                            '\u0440\u0430\u0437\u0440\u0435\u0448\u0435\u043d\u0438\u0435 '
-                            '\u043f\u0435\u0440\u0435\u0434 \u0441\u0436\u0430\u0442\u0438\u0435\u043c '
-                            '\u0438 \u0434\u043e\u0431\u0430\u0432\u043b\u044f\u0435\u0442 '
-                            '\u0445\u0430\u0440\u0430\u043a\u0442\u0435\u0440\u043d\u0443\u044e '
-                            '\u043f\u0438\u043a\u0441\u0435\u043b\u0438\u0437\u0430\u0446\u0438\u044e.',
-                        value: _downscaleFactor,
-                        min: 1,
-                        max: 8,
-                        divisions: 70,
-                        onChanged: _updateDownscale,
-                      ),
-                      if (_needsRefresh) ...[
-                        const SizedBox(height: 18),
-                        const _HintPill(
-                          text:
-                              '\u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438 '
-                              '\u0438\u0437\u043c\u0435\u043d\u0435\u043d\u044b. '
-                              '\u041d\u0430\u0436\u043c\u0438\u0442\u0435 '
-                              '\u00ab\u0417\u0410\u0428\u0410\u041a\u0410\u041b\u0418\u0422\u042c\u00bb, '
-                              '\u0447\u0442\u043e\u0431\u044b \u043e\u0431\u043d\u043e\u0432\u0438\u0442\u044c '
-                              '\u043f\u0440\u0435\u0432\u044c\u044e.',
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: _isProcessing ? null : _processImage,
-                        style: ElevatedButton.styleFrom(
-                          elevation: 0,
-                          backgroundColor: colorScheme.primary,
-                          foregroundColor: colorScheme.onPrimary,
-                          padding: const EdgeInsets.symmetric(vertical: 22),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          textStyle: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                        child: _ButtonLabel(
-                          text: _isProcessing ? _processing : _process,
-                          busy: _isProcessing,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: _isSaving ? null : _saveImage,
-                        style: ElevatedButton.styleFrom(
-                          elevation: 0,
-                          backgroundColor: colorScheme.secondaryContainer,
-                          foregroundColor: colorScheme.onSecondaryContainer,
-                          padding: const EdgeInsets.symmetric(vertical: 22),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          textStyle: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                        child: _ButtonLabel(
-                          text: _isSaving ? _saving : _save,
-                          busy: _isSaving,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
             ),
           ),
+          if (_isRevealActive)
+            Positioned.fill(
+              child: AnimatedBuilder(
+                animation: _themeRevealController,
+                builder: (context, child) {
+                  final radius = lerpDouble(
+                    0,
+                    _maxRevealRadius(size, _revealCenter),
+                    Curves.easeOutCubic.transform(_themeRevealController.value),
+                  )!;
+
+                  return IgnorePointer(
+                    child: ClipPath(
+                      clipper: _CircularRevealClipper(
+                        center: _revealCenter,
+                        radius: radius,
+                      ),
+                      child: child,
+                    ),
+                  );
+                },
+                child: _ThemedLayer(
+                  theme: _targetTheme,
+                  ignorePointer: true,
+                  child: _PageContent(
+                    scrollController: _scrollController,
+                    hasImage: _hasImage,
+                    previewBytes: _previewBytes,
+                    previewBadge: _previewBadge,
+                    previewDimensions: _previewDimensions,
+                    fileName: _fileName,
+                    quality: _quality,
+                    qualityLabel: _qualityLabel,
+                    downscaleFactor: _downscaleFactor,
+                    artifactLabel: _artifactLabel,
+                    isDark: _pendingDarkValue,
+                    needsRefresh: _needsRefresh,
+                    onPickImage: _pickImage,
+                    onReplaceImage: _pickImage,
+                    onThemeTap: _toggleTheme,
+                    onQualityChanged: _updateQuality,
+                    onDownscaleChanged: _updateDownscale,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+      bottomNavigationBar: Theme(
+        data: _activeTheme,
+        child: _BottomActionBar(
+          hasImage: _hasImage,
+          isProcessing: _isProcessing,
+          isSaving: _isSaving,
+          onProcess: _processImage,
+          onSave: _saveImage,
         ),
       ),
     );
   }
 }
 
-class _HeroHeader extends StatelessWidget {
-  const _HeroHeader({required this.onPickImage, required this.hasImage});
+class _ThemedLayer extends StatelessWidget {
+  const _ThemedLayer({
+    required this.theme,
+    required this.child,
+    required this.ignorePointer,
+  });
 
-  final VoidCallback onPickImage;
-  final bool hasImage;
+  final ThemeData theme;
+  final Widget child;
+  final bool ignorePointer;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final heroPurple = const Color(
-      0xFF7A54FF,
-    ).harmonizeWith(colorScheme.primary);
-    final heroLavender = const Color(
-      0xFFD8C4FF,
-    ).harmonizeWith(colorScheme.primary);
-
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(36),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color.alphaBlend(
-              heroPurple.withValues(alpha: 0.92),
-              colorScheme.primaryContainer,
-            ),
-            Color.alphaBlend(
-              heroLavender.withValues(alpha: 0.95),
-              colorScheme.tertiaryContainer,
-            ),
-          ],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: heroPurple.withValues(alpha: 0.18),
-            blurRadius: 28,
-            offset: const Offset(0, 18),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '\u0428\u041a\u041b',
-                  style: theme.textTheme.displaySmall?.copyWith(
-                    color: colorScheme.onPrimaryContainer,
-                  ),
-                ),
-              ),
-              FilledButton.tonal(
-                onPressed: onPickImage,
-                style: FilledButton.styleFrom(
-                  backgroundColor: colorScheme.surface.withValues(alpha: 0.18),
-                  foregroundColor: colorScheme.onPrimaryContainer,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 18,
-                    vertical: 14,
-                  ),
-                ),
-                child: Text(
-                  hasImage
-                      ? _ShakalHomePageState._changePhoto
-                      : _ShakalHomePageState._pickPhoto,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            '\u041e\u0434\u043d\u043e\u0441\u0442\u0440\u0430\u043d\u0438\u0447\u043d\u044b\u0439 '
-            '\u043a\u043e\u043c\u043f\u0440\u0435\u0441\u0441\u043e\u0440 '
-            '\u0432 \u0434\u0443\u0445\u0435 \u043b\u0435\u0433\u0435\u043d\u0434\u0430\u0440\u043d\u043e\u0433\u043e '
-            '\u0448\u0430\u043a\u0430\u043b-\u0440\u0435\u0436\u0438\u043c\u0430: '
-            '\u0443\u043c\u0435\u043d\u044c\u0448\u0430\u0435\u043c '
-            '\u0440\u0430\u0437\u0440\u0435\u0448\u0435\u043d\u0438\u0435, '
-            '\u0434\u0430\u0432\u0438\u043c JPEG \u0438 \u043f\u043e\u043b\u0443\u0447\u0430\u0435\u043c '
-            '\u0447\u0435\u0441\u0442\u043d\u044b\u0439 '
-            '\u0438\u043d\u0442\u0435\u0440\u043d\u0435\u0442-\u0432\u0430\u0439\u0431.',
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: colorScheme.onPrimaryContainer.withValues(alpha: 0.82),
-              height: 1.35,
-            ),
-          ),
-        ],
+    return Theme(
+      data: theme,
+      child: IgnorePointer(
+        ignoring: ignorePointer,
+        child: Material(color: theme.scaffoldBackgroundColor, child: child),
       ),
     );
   }
 }
 
-class _PreviewCard extends StatelessWidget {
-  const _PreviewCard({
-    required this.imageBytes,
+class _PageContent extends StatelessWidget {
+  const _PageContent({
+    required this.scrollController,
+    required this.hasImage,
+    required this.previewBytes,
+    required this.previewBadge,
+    required this.previewDimensions,
     required this.fileName,
-    required this.originalSize,
-    required this.processedSize,
-    required this.hasProcessedVersion,
+    required this.quality,
+    required this.qualityLabel,
+    required this.downscaleFactor,
+    required this.artifactLabel,
+    required this.isDark,
     required this.needsRefresh,
     required this.onPickImage,
+    required this.onReplaceImage,
+    required this.onThemeTap,
+    required this.onQualityChanged,
+    required this.onDownscaleChanged,
   });
 
-  final Uint8List? imageBytes;
+  final ScrollController scrollController;
+  final bool hasImage;
+  final Uint8List? previewBytes;
+  final String previewBadge;
+  final String previewDimensions;
   final String? fileName;
-  final String originalSize;
-  final String processedSize;
-  final bool hasProcessedVersion;
+  final double quality;
+  final String qualityLabel;
+  final double downscaleFactor;
+  final String artifactLabel;
+  final bool isDark;
   final bool needsRefresh;
-  final VoidCallback onPickImage;
+  final Future<void> Function() onPickImage;
+  final Future<void> Function() onReplaceImage;
+  final ValueChanged<Offset> onThemeTap;
+  final ValueChanged<double> onQualityChanged;
+  final ValueChanged<double> onDownscaleChanged;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final size = MediaQuery.sizeOf(context);
+    final buttonSize = math.min(size.width * 0.58, 296.0);
+    final topGlow = isDark
+        ? colorScheme.primary.withValues(alpha: 0.14)
+        : colorScheme.primary.withValues(alpha: 0.10);
 
-    return _SurfaceCard(
-      padding: EdgeInsets.zero,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(32),
-        child: AspectRatio(
-          aspectRatio: 4 / 5,
-          child: imageBytes == null
-              ? DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        colorScheme.primaryContainer.withValues(alpha: 0.22),
-                        colorScheme.tertiaryContainer.withValues(alpha: 0.16),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: RadialGradient(
+          center: const Alignment(0, -0.95),
+          radius: 1.3,
+          colors: [topGlow, colorScheme.surface, colorScheme.surface],
+        ),
+      ),
+      child: SafeArea(
+        child: SingleChildScrollView(
+          controller: scrollController,
+          padding: const EdgeInsets.fromLTRB(22, 18, 22, 26),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text(
+                    'ШКЛ',
+                    style: theme.textTheme.headlineMedium?.copyWith(
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                  const Spacer(),
+                  _ThemeSwitchIconButton(isDark: isDark, onTapDown: onThemeTap),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Выбери фото, задай качество и выкрути артефакты до нужного уровня.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Center(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 520),
+                  switchInCurve: Curves.easeOutBack,
+                  switchOutCurve: Curves.easeInOut,
+                  transitionBuilder: (child, animation) {
+                    return FadeTransition(
+                      opacity: animation,
+                      child: ScaleTransition(
+                        scale: Tween<double>(
+                          begin: 0.92,
+                          end: 1,
+                        ).animate(animation),
+                        child: child,
+                      ),
+                    );
+                  },
+                  child: hasImage
+                      ? _PhotoPreviewStage(
+                          key: const ValueKey('preview-stage'),
+                          imageBytes: previewBytes!,
+                          badge: previewBadge,
+                          dimensions: previewDimensions,
+                          fileName: fileName,
+                          needsRefresh: needsRefresh,
+                          onTap: onReplaceImage,
+                        )
+                      : SizedBox(
+                          key: const ValueKey('picker-stage'),
+                          width: buttonSize,
+                          height: buttonSize,
+                          child: _MorphingPhotoButton(
+                            onTap: onPickImage,
+                            label: 'Выбрать фото',
+                            accentColor: colorScheme.primaryContainer,
+                            foregroundColor: colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                ),
+              ),
+              const SizedBox(height: 26),
+              _ControlCard(
+                title: 'Степень сжатия',
+                badgeText: qualityLabel,
+                badgeColor: colorScheme.primary.withValues(alpha: 0.18),
+                badgeTextColor: colorScheme.primaryContainer,
+                child: Column(
+                  children: [
+                    SliderTheme(
+                      data: SliderThemeData(
+                        trackHeight: 16,
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 12,
+                        ),
+                        overlayShape: const RoundSliderOverlayShape(
+                          overlayRadius: 24,
+                        ),
+                        activeTrackColor: colorScheme.primary,
+                        inactiveTrackColor: colorScheme.surfaceContainerHighest,
+                        thumbColor: colorScheme.primary,
+                        overlayColor: colorScheme.primary.withValues(
+                          alpha: 0.12,
+                        ),
+                        trackShape: const RoundedRectSliderTrackShape(),
+                      ),
+                      child: Slider(
+                        value: quality / 100,
+                        onChanged: (value) => onQualityChanged(value * 100),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Text(
+                          'Минимум',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          'Максимум',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
                       ],
                     ),
-                    borderRadius: BorderRadius.circular(32),
-                    border: Border.all(
-                      color: colorScheme.outlineVariant.withValues(alpha: 0.45),
-                    ),
-                  ),
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.photo_size_select_large_rounded,
-                            size: 64,
-                            color: colorScheme.primary,
-                          ),
-                          const SizedBox(height: 18),
-                          Text(
-                            '\u041f\u0440\u0435\u0432\u044c\u044e '
-                            '\u043f\u043e\u044f\u0432\u0438\u0442\u0441\u044f '
-                            '\u0437\u0434\u0435\u0441\u044c',
-                            style: theme.textTheme.headlineSmall,
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            '\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 '
-                            '\u0444\u043e\u0442\u043e \u0438\u0437 '
-                            '\u0433\u0430\u043b\u0435\u0440\u0435\u0438 '
-                            '\u0438 \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u0442\u0435 '
-                            '\u0443\u0440\u043e\u0432\u0435\u043d\u044c '
-                            '\u0448\u0430\u043a\u0430\u043b\u0438\u0437\u0430\u0446\u0438\u0438.',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                              height: 1.35,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 22),
-                          FilledButton.tonal(
-                            onPressed: onPickImage,
-                            child: const Text(
-                              _ShakalHomePageState._openGallery,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                )
-              : Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: colorScheme.surfaceContainerHighest,
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(24),
-                          child: Image.memory(imageBytes!, fit: BoxFit.contain),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      top: 16,
-                      left: 16,
-                      right: 16,
-                      child: Row(
-                        children: [
-                          _InfoChip(
-                            text: hasProcessedVersion
-                                ? '\u0417\u0430\u0448\u0430\u043a\u0430\u043b\u0435\u043d\u043e'
-                                : '\u041e\u0440\u0438\u0433\u0438\u043d\u0430\u043b',
-                          ),
-                          const Spacer(),
-                          _InfoChip(
-                            text: hasProcessedVersion
-                                ? processedSize
-                                : originalSize,
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (fileName != null)
-                      Positioned(
-                        left: 16,
-                        right: 16,
-                        bottom: 16,
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 12,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: colorScheme.surface.withValues(
-                                    alpha: 0.92,
-                                  ),
-                                  borderRadius: BorderRadius.circular(24),
-                                ),
-                                child: Text(
-                                  fileName!,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            FilledButton.tonal(
-                              onPressed: onPickImage,
-                              style: FilledButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 18,
-                                  vertical: 16,
-                                ),
-                              ),
-                              child: const Text(_ShakalHomePageState._replace),
-                            ),
-                          ],
-                        ),
-                      ),
-                    if (needsRefresh)
-                      Positioned(
-                        left: 16,
-                        right: 16,
-                        bottom: fileName != null ? 82 : 16,
-                        child: const _HintPill(
-                          text:
-                              '\u0422\u0435\u043a\u0443\u0449\u0435\u0435 '
-                              '\u043f\u0440\u0435\u0432\u044c\u044e '
-                              '\u0435\u0449\u0435 \u043d\u0435 '
-                              '\u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u043e '
-                              '\u043d\u043e\u0432\u044b\u043c\u0438 '
-                              '\u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0430\u043c\u0438.',
-                        ),
-                      ),
                   ],
                 ),
+              ),
+              const SizedBox(height: 18),
+              _ControlCard(
+                title: 'Интенсивность\nартефактов',
+                badgeText: artifactLabel,
+                badgeColor: colorScheme.secondaryContainer,
+                badgeTextColor: colorScheme.onSecondaryContainer,
+                child: SliderTheme(
+                  data: SliderThemeData(
+                    trackHeight: 16,
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 12,
+                    ),
+                    overlayShape: const RoundSliderOverlayShape(
+                      overlayRadius: 24,
+                    ),
+                    activeTrackColor: colorScheme.secondaryContainer,
+                    inactiveTrackColor: colorScheme.surfaceContainerHighest,
+                    thumbColor: colorScheme.secondaryContainer,
+                    overlayColor: colorScheme.secondary.withValues(alpha: 0.12),
+                    trackShape: const RoundedRectSliderTrackShape(),
+                  ),
+                  child: Slider(
+                    value: (downscaleFactor - 1) / 7,
+                    onChanged: (value) => onDownscaleChanged(1 + value * 7),
+                  ),
+                ),
+              ),
+              if (needsRefresh) ...[
+                const SizedBox(height: 18),
+                Text(
+                  'Превью ещё не обновлено новыми настройками. Нажми «Зашакалить».',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 18),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _SliderSection extends StatelessWidget {
-  const _SliderSection({
-    required this.title,
-    required this.valueLabel,
-    required this.caption,
-    required this.value,
-    required this.min,
-    required this.max,
-    required this.divisions,
-    required this.onChanged,
+class _BottomActionBar extends StatelessWidget {
+  const _BottomActionBar({
+    required this.hasImage,
+    required this.isProcessing,
+    required this.isSaving,
+    required this.onProcess,
+    required this.onSave,
   });
 
-  final String title;
-  final String valueLabel;
-  final String caption;
-  final double value;
-  final double min;
-  final double max;
-  final int divisions;
-  final ValueChanged<double> onChanged;
+  final bool hasImage;
+  final bool isProcessing;
+  final bool isSaving;
+  final Future<void> Function() onProcess;
+  final Future<void> Function() onSave;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.shadow.withValues(alpha: 0.10),
+            blurRadius: 22,
+            offset: const Offset(0, -8),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(22, 10, 22, hasImage ? 16 : 10),
+          child: AnimatedSize(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.center,
+            child: hasImage
+                ? Row(
+                    children: [
+                      Expanded(
+                        child: _BottomActionButton(
+                          expanded: true,
+                          icon: Icons.auto_fix_high_rounded,
+                          label: isProcessing ? 'Шакалим...' : 'Зашакалить',
+                          busy: isProcessing,
+                          onPressed: isProcessing ? null : onProcess,
+                          style: _BottomActionStyle.filled,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _BottomActionButton(
+                          expanded: true,
+                          icon: Icons.save_alt_rounded,
+                          label: isSaving ? 'Сохраняем...' : 'Сохранить',
+                          busy: isSaving,
+                          onPressed: isSaving ? null : onSave,
+                          style: _BottomActionStyle.tonal,
+                        ),
+                      ),
+                    ],
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _BottomActionButton(
+                        expanded: false,
+                        icon: Icons.auto_fix_high_rounded,
+                        label: 'Зашакалить',
+                        busy: isProcessing,
+                        onPressed: isProcessing ? null : onProcess,
+                        style: _BottomActionStyle.filled,
+                      ),
+                      const SizedBox(width: 12),
+                      _BottomActionButton(
+                        expanded: false,
+                        icon: Icons.save_alt_rounded,
+                        label: 'Сохранить',
+                        busy: isSaving,
+                        onPressed: isSaving ? null : onSave,
+                        style: _BottomActionStyle.tonal,
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+enum _BottomActionStyle { filled, tonal }
+
+class _BottomActionButton extends StatelessWidget {
+  const _BottomActionButton({
+    required this.expanded,
+    required this.icon,
+    required this.label,
+    required this.busy,
+    required this.onPressed,
+    required this.style,
+  });
+
+  final bool expanded;
+  final IconData icon;
+  final String label;
+  final bool busy;
+  final VoidCallback? onPressed;
+  final _BottomActionStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final buttonStyle = FilledButton.styleFrom(
+      minimumSize: expanded ? const Size.fromHeight(56) : const Size(52, 52),
+      padding: EdgeInsets.symmetric(horizontal: expanded ? 18 : 0),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+      backgroundColor: style == _BottomActionStyle.filled
+          ? colorScheme.primaryContainer
+          : null,
+      foregroundColor: style == _BottomActionStyle.filled
+          ? colorScheme.onPrimaryContainer
+          : null,
+    );
+
+    final child = AnimatedSwitcher(
+      duration: const Duration(milliseconds: 240),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      child: expanded
+          ? _BusyLabel(
+              key: ValueKey<String>('expanded-$label-$busy'),
+              text: label,
+              busy: busy,
+              leading: Icon(icon),
+            )
+          : Icon(key: ValueKey<IconData>(icon), icon),
+    );
+
+    final button = style == _BottomActionStyle.filled
+        ? FilledButton(onPressed: onPressed, style: buttonStyle, child: child)
+        : FilledButton.tonal(
+            onPressed: onPressed,
+            style: buttonStyle,
+            child: child,
+          );
+
+    return Semantics(
+      label: label,
+      button: true,
+      child: SizedBox(
+        width: expanded ? double.infinity : 52,
+        height: expanded ? 58 : 52,
+        child: button,
+      ),
+    );
+  }
+}
+
+class _PhotoPreviewStage extends StatelessWidget {
+  const _PhotoPreviewStage({
+    super.key,
+    required this.imageBytes,
+    required this.badge,
+    required this.dimensions,
+    required this.fileName,
+    required this.needsRefresh,
+    required this.onTap,
+  });
+
+  final Uint8List imageBytes;
+  final String badge;
+  final String dimensions;
+  final String? fileName;
+  final bool needsRefresh;
+  final Future<void> Function() onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final width = math.min(MediaQuery.sizeOf(context).width - 44, 340.0);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(child: Text(title, style: theme.textTheme.titleLarge)),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: colorScheme.primaryContainer.withValues(alpha: 0.44),
-                borderRadius: BorderRadius.circular(999),
+    return Semantics(
+      button: true,
+      label: 'Выбранное фото',
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: width,
+          height: width * 1.04,
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(36),
+            boxShadow: [
+              BoxShadow(
+                color: colorScheme.shadow.withValues(alpha: 0.24),
+                blurRadius: 30,
+                offset: const Offset(0, 18),
               ),
-              child: Text(
-                valueLabel,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  color: colorScheme.onPrimaryContainer,
+            ],
+          ),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(28),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainer,
+                      ),
+                      child: Image.memory(imageBytes, fit: BoxFit.cover),
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Text(
-          caption,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: colorScheme.onSurfaceVariant,
-            height: 1.35,
+              Positioned(top: 18, left: 18, child: _PreviewBadge(text: badge)),
+              Positioned(
+                top: 18,
+                right: 18,
+                child: _PreviewBadge(text: dimensions),
+              ),
+              Positioned(
+                right: 18,
+                bottom: 18,
+                child: IconButton.filledTonal(
+                  onPressed: onTap,
+                  icon: const Icon(Icons.add_a_photo_outlined),
+                ),
+              ),
+              if (fileName != null)
+                Positioned(
+                  left: 18,
+                  right: 78,
+                  bottom: 18,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surface.withValues(alpha: 0.82),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      fileName!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              if (needsRefresh)
+                Positioned(
+                  left: 18,
+                  right: 18,
+                  bottom: fileName == null ? 78 : 68,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colorScheme.secondaryContainer.withValues(
+                        alpha: 0.92,
+                      ),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Text(
+                      'Фото на экране ещё не пересчитано.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSecondaryContainer,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
-        const SizedBox(height: 14),
-        Slider(
-          value: value,
-          min: min,
-          max: max,
-          divisions: divisions,
-          label: valueLabel,
-          onChanged: onChanged,
-        ),
-      ],
+      ),
     );
   }
 }
 
-class _SurfaceCard extends StatelessWidget {
-  const _SurfaceCard({
-    required this.child,
-    this.padding = const EdgeInsets.all(20),
-  });
+class _PreviewBadge extends StatelessWidget {
+  const _PreviewBadge({required this.text});
 
-  final Widget child;
-  final EdgeInsets padding;
+  final String text;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
-      padding: padding,
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
       decoration: BoxDecoration(
-        color: colorScheme.surface.withValues(alpha: 0.86),
-        borderRadius: BorderRadius.circular(32),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.24),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withValues(alpha: 0.08),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
-      child: child,
-    );
-  }
-}
-
-class _InfoChip extends StatelessWidget {
-  const _InfoChip({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: colorScheme.surface.withValues(alpha: 0.92),
+        color: colorScheme.surface.withValues(alpha: 0.82),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         text,
-        style: theme.textTheme.labelLarge?.copyWith(
-          fontWeight: FontWeight.w700,
-        ),
+        style: Theme.of(
+          context,
+        ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700),
       ),
     );
   }
 }
 
-class _HintPill extends StatelessWidget {
-  const _HintPill({required this.text});
+class _ControlCard extends StatelessWidget {
+  const _ControlCard({
+    required this.title,
+    required this.badgeText,
+    required this.badgeColor,
+    required this.badgeTextColor,
+    required this.child,
+  });
 
-  final String text;
+  final String title;
+  final String badgeText;
+  final Color badgeColor;
+  final Color badgeTextColor;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
@@ -941,47 +1056,417 @@ class _HintPill extends StatelessWidget {
     final colorScheme = theme.colorScheme;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
       decoration: BoxDecoration(
-        color: colorScheme.tertiaryContainer.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(22),
+        color: colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(34),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.16),
+        ),
       ),
-      child: Text(
-        text,
-        style: theme.textTheme.bodyMedium?.copyWith(
-          color: colorScheme.onTertiaryContainer,
-          fontWeight: FontWeight.w600,
-          height: 1.3,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontSize: 28,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: badgeColor,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  badgeText,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: badgeTextColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 22),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _BusyLabel extends StatelessWidget {
+  const _BusyLabel({
+    super.key,
+    required this.text,
+    required this.busy,
+    this.leading,
+  });
+
+  final String text;
+  final bool busy;
+  final Widget? leading;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = DefaultTextStyle.of(context).style.color;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (leading != null) ...[leading!, const SizedBox(width: 10)],
+        if (busy) ...[
+          SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2.2, color: color),
+          ),
+          const SizedBox(width: 10),
+        ],
+        Flexible(child: Text(text)),
+      ],
+    );
+  }
+}
+
+class _ThemeSwitchIconButton extends StatelessWidget {
+  const _ThemeSwitchIconButton({required this.isDark, required this.onTapDown});
+
+  final bool isDark;
+  final ValueChanged<Offset> onTapDown;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return GestureDetector(
+      onTapDown: (details) => onTapDown(details.globalPosition),
+      child: IconButton.filledTonal(
+        tooltip: isDark ? 'Светлая тема' : 'Тёмная тема',
+        onPressed: () {},
+        icon: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 220),
+          child: Icon(
+            isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+            key: ValueKey<bool>(isDark),
+            color: colorScheme.primary,
+          ),
         ),
       ),
     );
   }
 }
 
-class _ButtonLabel extends StatelessWidget {
-  const _ButtonLabel({required this.text, required this.busy});
+class _MorphingPhotoButton extends StatefulWidget {
+  const _MorphingPhotoButton({
+    required this.onTap,
+    required this.label,
+    required this.accentColor,
+    required this.foregroundColor,
+  });
 
-  final String text;
-  final bool busy;
+  final Future<void> Function() onTap;
+  final String label;
+  final Color accentColor;
+  final Color foregroundColor;
+
+  @override
+  State<_MorphingPhotoButton> createState() => _MorphingPhotoButtonState();
+}
+
+class _MorphingPhotoButtonState extends State<_MorphingPhotoButton>
+    with TickerProviderStateMixin {
+  final _MorphPreset _chosenPreset =
+      _MorphPreset.values[math.Random().nextInt(_MorphPreset.values.length)];
+
+  late final AnimationController _rotationController = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 40),
+  )..repeat();
+
+  late final AnimationController _pressController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 280),
+  );
+
+  late final AnimationController _glowController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 620),
+  );
+
+  @override
+  void dispose() {
+    _rotationController.dispose();
+    _pressController.dispose();
+    _glowController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleTap() async {
+    HapticFeedback.selectionClick();
+    _pressController.forward(from: 0);
+    _glowController.forward(from: 0);
+    await widget.onTap();
+    if (mounted) {
+      _pressController.reverse();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        if (busy) ...[
-          SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(
-              strokeWidth: 2.2,
-              color: DefaultTextStyle.of(context).style.color,
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        _rotationController,
+        _pressController,
+        _glowController,
+      ]),
+      builder: (context, _) {
+        final rotation = _rotationController.value * 2 * math.pi;
+        final press = Curves.easeOutBack.transform(_pressController.value);
+        final glow = Curves.easeOut.transform(1 - _glowController.value);
+        final scale = 1 - 0.06 * press;
+
+        return Semantics(
+          button: true,
+          label: widget.label,
+          child: GestureDetector(
+            onTap: _handleTap,
+            child: Stack(
+              alignment: Alignment.center,
+              clipBehavior: Clip.none,
+              children: [
+                IgnorePointer(
+                  child: Container(
+                    width: double.infinity,
+                    height: double.infinity,
+                    decoration: BoxDecoration(
+                      gradient: RadialGradient(
+                        radius: 0.85,
+                        colors: [
+                          widget.accentColor.withValues(alpha: 0.26 * glow),
+                          widget.accentColor.withValues(alpha: 0.08 * glow),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Transform.scale(
+                  scale: scale,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Positioned.fill(
+                        child: Transform.rotate(
+                          angle: rotation,
+                          child: CustomPaint(
+                            painter: _StaticShapePainter(
+                              preset: _chosenPreset,
+                              fillColor: widget.accentColor,
+                              outlineColor: widget.foregroundColor.withValues(
+                                alpha: 0.18,
+                              ),
+                              shadowColor: widget.accentColor.withValues(
+                                alpha: 0.34,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 22,
+                          vertical: 30,
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.add_a_photo_outlined,
+                              size: 52,
+                              color: widget.foregroundColor,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              widget.label,
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.robotoFlex(
+                                textStyle: TextStyle(
+                                  fontSize: 28,
+                                  color: widget.foregroundColor,
+                                  fontVariations: const [
+                                    FontVariation('wght', 900),
+                                    FontVariation('wdth', 150),
+                                  ],
+                                  height: 1.05,
+                                  letterSpacing: -0.5,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 10),
-        ],
-        Flexible(child: Text(text, textAlign: TextAlign.center)),
-      ],
+        );
+      },
     );
+  }
+}
+
+enum _MorphPreset {
+  circle,
+  softSquare,
+  rounded,
+  verySunny,
+  fourSidedCookie,
+  scallop,
+  blossom,
+  gem,
+}
+
+class _StaticShapePainter extends CustomPainter {
+  const _StaticShapePainter({
+    required this.preset,
+    required this.fillColor,
+    required this.outlineColor,
+    required this.shadowColor,
+  });
+
+  final _MorphPreset preset;
+  final Color fillColor;
+  final Color outlineColor;
+  final Color shadowColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = _buildShapePath(size: size, preset: preset);
+
+    canvas.drawShadow(path, shadowColor, 24, false);
+
+    final rect = Offset.zero & size;
+    final fillPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color.alphaBlend(Colors.white.withValues(alpha: 0.06), fillColor),
+          fillColor,
+          Color.alphaBlend(Colors.black.withValues(alpha: 0.07), fillColor),
+        ],
+      ).createShader(rect);
+
+    final outlinePaint = Paint()
+      ..color = outlineColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+
+    canvas.drawPath(path, fillPaint);
+    canvas.drawPath(path, outlinePaint);
+  }
+
+  Path _buildShapePath({required Size size, required _MorphPreset preset}) {
+    const points = 96;
+    final center = Offset(size.width / 2, size.height / 2);
+    final baseRadius = math.min(size.width, size.height) * 0.39;
+    final path = Path();
+
+    for (var index = 0; index <= points; index++) {
+      final progress = index / points;
+      final angle = -math.pi / 2 + progress * math.pi * 2;
+      final radius = baseRadius * _radiusFor(preset, angle);
+      final point = Offset(
+        center.dx + math.cos(angle) * radius,
+        center.dy + math.sin(angle) * radius,
+      );
+
+      if (index == 0) {
+        path.moveTo(point.dx, point.dy);
+      } else {
+        path.lineTo(point.dx, point.dy);
+      }
+    }
+
+    path.close();
+    return path;
+  }
+
+  double _superellipseRadius(double angle, double exponent) {
+    final cosine = math.cos(angle).abs();
+    final sine = math.sin(angle).abs();
+    return math
+        .pow(
+          math.pow(cosine, exponent) + math.pow(sine, exponent),
+          -1 / exponent,
+        )
+        .toDouble();
+  }
+
+  double _radiusFor(_MorphPreset preset, double angle) {
+    switch (preset) {
+      case _MorphPreset.circle:
+        return 1;
+      case _MorphPreset.softSquare:
+        return 0.92 * _superellipseRadius(angle, 4);
+      case _MorphPreset.rounded:
+        return 1.0 +
+            0.08 * math.sin(2 * angle - 0.7) +
+            0.06 * math.cos(3 * angle + 1.1);
+      case _MorphPreset.verySunny:
+        return 0.98 + 0.12 * math.cos(8 * angle) + 0.035 * math.cos(16 * angle);
+      case _MorphPreset.fourSidedCookie:
+        return 0.99 +
+            0.10 * math.cos(4 * angle + math.pi / 4) -
+            0.03 * math.cos(8 * angle);
+      case _MorphPreset.scallop:
+        return 0.98 +
+            0.075 * math.cos(12 * angle) +
+            0.025 * math.cos(24 * angle);
+      case _MorphPreset.blossom:
+        return 0.94 + 0.14 * math.cos(6 * angle);
+      case _MorphPreset.gem:
+        return 0.96 + 0.10 * math.cos(6 * angle) - 0.08 * math.cos(2 * angle);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _StaticShapePainter oldDelegate) {
+    return oldDelegate.preset != preset ||
+        oldDelegate.fillColor != fillColor ||
+        oldDelegate.outlineColor != outlineColor ||
+        oldDelegate.shadowColor != shadowColor;
+  }
+}
+
+class _CircularRevealClipper extends CustomClipper<Path> {
+  const _CircularRevealClipper({required this.center, required this.radius});
+
+  final Offset center;
+  final double radius;
+
+  @override
+  Path getClip(Size size) {
+    return Path()..addOval(Rect.fromCircle(center: center, radius: radius));
+  }
+
+  @override
+  bool shouldReclip(covariant _CircularRevealClipper oldClipper) {
+    return oldClipper.center != center || oldClipper.radius != radius;
   }
 }
