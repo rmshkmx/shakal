@@ -20,13 +20,17 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.SaveAlt
+import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -41,18 +45,23 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.graphics.shapes.CornerRounding
 import androidx.graphics.shapes.Morph
 import androidx.graphics.shapes.RoundedPolygon
@@ -66,7 +75,7 @@ import kotlin.math.max
 import kotlin.math.sqrt
 import kotlin.random.Random
 
-// ─── M3 Expressive shapes (only big, space-filling ones) ───
+// ─── M3 Expressive shapes ───
 
 fun createM3Shape(index: Int): Shape {
     val polygon = when (index % 8) {
@@ -164,6 +173,7 @@ class MainActivity : ComponentActivity() {
             var isRevealing by remember { mutableStateOf(false) }
             var revealToDark by remember { mutableStateOf(false) }
             val coroutineScope = rememberCoroutineScope()
+            var currentPage by remember { mutableIntStateOf(0) }
 
             Box(modifier = Modifier.fillMaxSize()) {
                 // Base layer
@@ -186,7 +196,9 @@ class MainActivity : ComponentActivity() {
                                         isRevealing = false
                                     }
                                 }
-                            }
+                            },
+                            initialPage = currentPage,
+                            onPageChanged = { currentPage = it }
                         )
                     }
                 }
@@ -208,7 +220,12 @@ class MainActivity : ComponentActivity() {
                                     .clip(CircularRevealShape(themeClickOffset, currentRadius)),
                                 color = MaterialTheme.colorScheme.surface
                             ) {
-                                ShakalApp(isDarkTheme = revealToDark, onThemeToggle = {})
+                                ShakalApp(
+                                    isDarkTheme = revealToDark,
+                                    onThemeToggle = {},
+                                    initialPage = currentPage,
+                                    onPageChanged = {}
+                                )
                             }
                         }
                     }
@@ -218,228 +235,733 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// ─── Main screen ───
+// ─── Main app container ───
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShakalApp(
     isDarkTheme: Boolean,
-    onThemeToggle: (Offset) -> Unit
+    onThemeToggle: (Offset) -> Unit,
+    initialPage: Int = 0,
+    onPageChanged: (Int) -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { 2 })
 
-    var imageUri by remember { mutableStateOf<Uri?>(null) }
+    // Sync page changes upward
+    LaunchedEffect(pagerState.currentPage) {
+        onPageChanged(pagerState.currentPage)
+    }
+
+    // ── Shakal page state ──
+    var shakalImageUri by remember { mutableStateOf<Uri?>(null) }
     var processedBitmap by remember { mutableStateOf<Bitmap?>(null) }
-
     var quality by remember { mutableFloatStateOf(50f) }
     var downscaleFactor by remember { mutableFloatStateOf(5.2f) }
-
     var isProcessing by remember { mutableStateOf(false) }
-    var isSaving by remember { mutableStateOf(false) }
-    var hasProcessedOnce by remember { mutableStateOf(false) }
-
+    var shakalHasProcessedOnce by remember { mutableStateOf(false) }
     var prevQualityStep by remember { mutableIntStateOf(50) }
     var prevDownscaleStep by remember { mutableIntStateOf(5) }
 
-    // Cascade animation state
-    var isVisible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        isVisible = true
-    }
+    // ── Meme page state ──
+    var memeImageUri by remember { mutableStateOf<Uri?>(null) }
+    var memeBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var topText by remember { mutableStateOf("") }
+    var bottomText by remember { mutableStateOf("") }
+    var topTextSize by remember { mutableFloatStateOf(32f) }
+    var bottomTextSize by remember { mutableFloatStateOf(32f) }
 
-    val imagePickerLauncher = rememberLauncherForActivityResult(
+    // ── Shared state ──
+    var isSaving by remember { mutableStateOf(false) }
+    var showFullScreenPreview by remember { mutableStateOf(false) }
+    var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
+
+    // Cascade animation
+    var isVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { isVisible = true }
+
+    // ── Photo pickers ──
+    val shakalPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia(),
         onResult = { uri ->
             if (uri != null) {
-                imageUri = uri
+                shakalImageUri = uri
                 processedBitmap = null
-                hasProcessedOnce = false
+                shakalHasProcessedOnce = false
             }
         }
     )
 
-    fun triggerProcessing() {
-        imageUri?.let { uri ->
+    val memePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia(),
+        onResult = { uri ->
+            if (uri != null) {
+                memeImageUri = uri
+                coroutineScope.launch {
+                    memeBitmap = MemeProcessor.loadBitmap(context, uri)
+                }
+            }
+        }
+    )
+
+    fun pickShakalPhoto() {
+        shakalPickerLauncher.launch(
+            androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+        )
+    }
+
+    fun pickMemePhoto() {
+        memePickerLauncher.launch(
+            androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+        )
+    }
+
+    fun triggerShakalProcessing() {
+        shakalImageUri?.let { uri ->
             coroutineScope.launch {
                 isProcessing = true
                 processedBitmap = ImageProcessor.processImage(context, uri, downscaleFactor, quality.toInt())
                 isProcessing = false
-                hasProcessedOnce = true
+                shakalHasProcessedOnce = true
             }
         }
     }
 
-    Scaffold(
-        floatingActionButton = {
-            AnimatedVisibility(
-                visible = hasProcessedOnce && processedBitmap != null,
-                enter = slideInVertically(initialOffsetY = { it * 2 }) + fadeIn(tween(400)),
-                exit = slideOutVertically(targetOffsetY = { it * 2 }) + fadeOut()
-            ) {
-                MorphingSaveButton(
-                    isSaving = isSaving,
-                    onClick = {
-                        processedBitmap?.let { bmp ->
-                            coroutineScope.launch {
-                                isSaving = true
-                                delay(600)
-                                val success = ImageProcessor.saveImageToGallery(context, bmp)
-                                isSaving = false
-                                Toast.makeText(context, if (success) "Сохранено!" else "Ошибка", Toast.LENGTH_SHORT).show()
+    // ── Save logic ──
+    val showSaveButton = when (pagerState.currentPage) {
+        0 -> shakalHasProcessedOnce && processedBitmap != null
+        1 -> memeImageUri != null && (topText.isNotBlank() || bottomText.isNotBlank())
+        else -> false
+    }
+
+    fun onSave() {
+        when (pagerState.currentPage) {
+            0 -> {
+                processedBitmap?.let { bmp ->
+                    coroutineScope.launch {
+                        isSaving = true
+                        delay(600)
+                        val success = ImageProcessor.saveImageToGallery(context, bmp)
+                        isSaving = false
+                        Toast.makeText(context, if (success) "Сохранено!" else "Ошибка", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            1 -> {
+                memeImageUri?.let { uri ->
+                    coroutineScope.launch {
+                        isSaving = true
+                        delay(600)
+                        val result = MemeProcessor.renderMeme(context, uri, topText, bottomText, topTextSize, bottomTextSize)
+                        if (result != null) {
+                            val success = ImageProcessor.saveImageToGallery(context, result)
+                            Toast.makeText(context, if (success) "Сохранено!" else "Ошибка", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "Ошибка", Toast.LENGTH_SHORT).show()
+                        }
+                        isSaving = false
+                    }
+                }
+            }
+        }
+    }
+
+    // ── UI ──
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            bottomBar = {
+                // Bottom navigation + save FAB
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                ) {
+                    // M3E Segmented navigation bar
+                    SingleChoiceSegmentedButtonRow(
+                        modifier = Modifier.align(Alignment.Center)
+                    ) {
+                        SegmentedButton(
+                            selected = pagerState.currentPage == 0,
+                            onClick = {
+                                performHapticTick(context)
+                                coroutineScope.launch { pagerState.animateScrollToPage(0) }
+                            },
+                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                            icon = {
+                                Icon(
+                                    Icons.Rounded.AutoFixHigh,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
+                        ) {
+                            Text("Шакал")
+                        }
+                        SegmentedButton(
+                            selected = pagerState.currentPage == 1,
+                            onClick = {
+                                performHapticTick(context)
+                                coroutineScope.launch { pagerState.animateScrollToPage(1) }
+                            },
+                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                            icon = {
+                                Icon(
+                                    Icons.Rounded.TextFields,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        ) {
+                            Text("Текст")
                         }
                     }
-                )
-            }
-        },
-        floatingActionButtonPosition = FabPosition.Center
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 22.dp)
-                .verticalScroll(rememberScrollState())
-        ) {
-            Spacer(modifier = Modifier.height(18.dp))
 
-            // Header
-            AnimatedVisibility(
-                visible = isVisible,
-                enter = slideInVertically(initialOffsetY = { it / 2 }, animationSpec = tween(600, easing = FastOutSlowInEasing)) + fadeIn(tween(600))
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "ШКЛ",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    var buttonCenter by remember { mutableStateOf(Offset.Zero) }
-                    IconButton(
-                        onClick = { onThemeToggle(buttonCenter) },
-                        modifier = Modifier.onGloballyPositioned { coords ->
-                            val pos = coords.localToRoot(Offset.Zero)
-                            buttonCenter = Offset(pos.x + coords.size.width / 2f, pos.y + coords.size.height / 2f)
-                        }
+                    // Save FAB (right side)
+                    AnimatedVisibility(
+                        visible = showSaveButton,
+                        modifier = Modifier.align(Alignment.CenterEnd),
+                        enter = scaleIn(spring(dampingRatio = 0.6f)) + fadeIn(),
+                        exit = scaleOut() + fadeOut()
                     ) {
-                        Icon(
-                            imageVector = if (isDarkTheme) Icons.Rounded.LightMode else Icons.Rounded.DarkMode,
-                            contentDescription = "Переключить тему",
-                            tint = MaterialTheme.colorScheme.primary
+                        MorphingSaveButton(
+                            isSaving = isSaving,
+                            onClick = { onSave() }
                         )
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Central button
-            AnimatedVisibility(
-                visible = isVisible,
-                enter = scaleIn(initialScale = 0.8f, animationSpec = tween(600, delayMillis = 100, easing = FastOutSlowInEasing)) + fadeIn(tween(600, delayMillis = 100))
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
             ) {
-                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    MorphingImageButton(
-                        imageUri = imageUri,
-                        processedBitmap = processedBitmap,
-                        onClick = {
-                            imagePickerLauncher.launch(
-                                androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                // Header
+                AnimatedVisibility(
+                    visible = isVisible,
+                    enter = slideInVertically(
+                        initialOffsetY = { it / 2 },
+                        animationSpec = tween(600, easing = FastOutSlowInEasing)
+                    ) + fadeIn(tween(600))
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 22.dp)
+                            .padding(top = 18.dp)
+                    ) {
+                        Text(
+                            text = "ШКЛ",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+
+                        var buttonCenter by remember { mutableStateOf(Offset.Zero) }
+                        IconButton(
+                            onClick = { onThemeToggle(buttonCenter) },
+                            modifier = Modifier.onGloballyPositioned { coords ->
+                                val pos = coords.localToRoot(Offset.Zero)
+                                buttonCenter = Offset(
+                                    pos.x + coords.size.width / 2f,
+                                    pos.y + coords.size.height / 2f
+                                )
+                            }
+                        ) {
+                            Icon(
+                                imageVector = if (isDarkTheme) Icons.Rounded.LightMode else Icons.Rounded.DarkMode,
+                                contentDescription = "Переключить тему",
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         }
-                    )
+                    }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(26.dp))
-
-            // Quality slider
-            AnimatedVisibility(
-                visible = isVisible,
-                enter = slideInVertically(initialOffsetY = { it / 2 }, animationSpec = tween(600, delayMillis = 200, easing = FastOutSlowInEasing)) + fadeIn(tween(600, delayMillis = 200))
-            ) {
-                ControlCard(
-                    title = "Степень сжатия",
-                    badgeText = "${quality.toInt()}%",
-                    badgeColor = MaterialTheme.colorScheme.secondaryContainer,
-                    badgeTextColor = MaterialTheme.colorScheme.onSecondaryContainer
-                ) {
-                    M3ESlider(
-                        value = quality,
-                        onValueChange = { newVal ->
-                            quality = newVal
-                            val step = newVal.toInt()
-                            if (step != prevQualityStep) {
-                                prevQualityStep = step
-                                performHapticTick(context)
-                            }
-                        },
-                        onValueChangeFinished = { triggerProcessing() },
-                        valueRange = 1f..100f,
-                        activeColor = MaterialTheme.colorScheme.primary,
-                        inactiveColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        thumbColor = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Минимум", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("Максимум", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // Page content (swipeable)
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                    beyondViewportPageCount = 1
+                ) { page ->
+                    when (page) {
+                        0 -> ShakalPageContent(
+                            imageUri = shakalImageUri,
+                            processedBitmap = processedBitmap,
+                            quality = quality,
+                            downscaleFactor = downscaleFactor,
+                            isVisible = isVisible,
+                            onPickPhoto = ::pickShakalPhoto,
+                            onPreview = {
+                                processedBitmap?.let {
+                                    previewBitmap = it
+                                    showFullScreenPreview = true
+                                }
+                            },
+                            onQualityChange = { newVal ->
+                                quality = newVal
+                                val step = newVal.toInt()
+                                if (step != prevQualityStep) {
+                                    prevQualityStep = step
+                                    performHapticTick(context)
+                                }
+                            },
+                            onQualityChangeFinished = ::triggerShakalProcessing,
+                            onDownscaleChange = { newVal ->
+                                downscaleFactor = newVal
+                                val step = newVal.toInt()
+                                if (step != prevDownscaleStep) {
+                                    prevDownscaleStep = step
+                                    performHapticTick(context)
+                                }
+                            },
+                            onDownscaleChangeFinished = ::triggerShakalProcessing
+                        )
+                        1 -> MemePageContent(
+                            imageUri = memeImageUri,
+                            originalBitmap = memeBitmap,
+                            topText = topText,
+                            bottomText = bottomText,
+                            topTextSize = topTextSize,
+                            bottomTextSize = bottomTextSize,
+                            isVisible = isVisible,
+                            onPickPhoto = ::pickMemePhoto,
+                            onPreview = {
+                                memeBitmap?.let {
+                                    previewBitmap = it
+                                    showFullScreenPreview = true
+                                }
+                            },
+                            onTopTextChange = { topText = it },
+                            onBottomTextChange = { bottomText = it },
+                            onTopTextSizeChange = { topTextSize = it },
+                            onBottomTextSizeChange = { bottomTextSize = it }
+                        )
                     }
                 }
             }
+        }
 
-            Spacer(modifier = Modifier.height(18.dp))
-
-            // Artifact slider
-            val artifactLabel = when {
-                downscaleFactor < 2.4f -> "Низкая"
-                downscaleFactor < 4.4f -> "Средняя"
-                downscaleFactor < 6.4f -> "Высокая"
-                else -> "Жёсткая"
-            }
-
-            AnimatedVisibility(
-                visible = isVisible,
-                enter = slideInVertically(initialOffsetY = { it / 2 }, animationSpec = tween(600, delayMillis = 300, easing = FastOutSlowInEasing)) + fadeIn(tween(600, delayMillis = 300))
-            ) {
-                ControlCard(
-                    title = "Интенсивность\nартефактов",
-                    badgeText = artifactLabel,
-                    badgeColor = MaterialTheme.colorScheme.secondaryContainer,
-                    badgeTextColor = MaterialTheme.colorScheme.onSecondaryContainer
-                ) {
-                    M3ESlider(
-                        value = downscaleFactor,
-                        onValueChange = { newVal ->
-                            downscaleFactor = newVal
-                            val step = newVal.toInt()
-                            if (step != prevDownscaleStep) {
-                                prevDownscaleStep = step
-                                performHapticTick(context)
-                            }
-                        },
-                        onValueChangeFinished = { triggerProcessing() },
-                        valueRange = 1f..8f,
-                        activeColor = MaterialTheme.colorScheme.secondary,
-                        inactiveColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        thumbColor = MaterialTheme.colorScheme.secondary
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(100.dp))
+        // Full-screen preview overlay
+        if (showFullScreenPreview && previewBitmap != null) {
+            FullScreenPreview(
+                bitmap = previewBitmap!!,
+                topText = if (pagerState.currentPage == 1) topText else "",
+                bottomText = if (pagerState.currentPage == 1) bottomText else "",
+                topTextSize = topTextSize,
+                bottomTextSize = bottomTextSize,
+                onDismiss = { showFullScreenPreview = false }
+            )
         }
     }
 }
 
-// ─── Native M3E Slider (using Material3 1.3+ thumbTrackGapSize) ───
+// ─── Shakal page (quality degradation) ───
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ShakalPageContent(
+    imageUri: Uri?,
+    processedBitmap: Bitmap?,
+    quality: Float,
+    downscaleFactor: Float,
+    isVisible: Boolean,
+    onPickPhoto: () -> Unit,
+    onPreview: () -> Unit,
+    onQualityChange: (Float) -> Unit,
+    onQualityChangeFinished: () -> Unit,
+    onDownscaleChange: (Float) -> Unit,
+    onDownscaleChangeFinished: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 22.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Central morphing button
+        AnimatedVisibility(
+            visible = isVisible,
+            enter = scaleIn(
+                initialScale = 0.8f,
+                animationSpec = tween(600, delayMillis = 100, easing = FastOutSlowInEasing)
+            ) + fadeIn(tween(600, delayMillis = 100))
+        ) {
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                MorphingImageButton(
+                    imageUri = imageUri,
+                    displayBitmap = processedBitmap,
+                    onPickPhoto = onPickPhoto,
+                    onPreview = onPreview
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(26.dp))
+
+        // Quality slider
+        AnimatedVisibility(
+            visible = isVisible,
+            enter = slideInVertically(
+                initialOffsetY = { it / 2 },
+                animationSpec = tween(600, delayMillis = 200, easing = FastOutSlowInEasing)
+            ) + fadeIn(tween(600, delayMillis = 200))
+        ) {
+            ControlCard(
+                title = "Степень сжатия",
+                badgeText = "${quality.toInt()}%",
+                badgeColor = MaterialTheme.colorScheme.secondaryContainer,
+                badgeTextColor = MaterialTheme.colorScheme.onSecondaryContainer
+            ) {
+                M3ESlider(
+                    value = quality,
+                    onValueChange = onQualityChange,
+                    onValueChangeFinished = onQualityChangeFinished,
+                    valueRange = 1f..100f,
+                    activeColor = MaterialTheme.colorScheme.primary,
+                    inactiveColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    thumbColor = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        "Минимум",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        "Максимум",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(18.dp))
+
+        // Artifact slider
+        val artifactLabel = when {
+            downscaleFactor < 2.4f -> "Низкая"
+            downscaleFactor < 4.4f -> "Средняя"
+            downscaleFactor < 6.4f -> "Высокая"
+            else -> "Жёсткая"
+        }
+
+        AnimatedVisibility(
+            visible = isVisible,
+            enter = slideInVertically(
+                initialOffsetY = { it / 2 },
+                animationSpec = tween(600, delayMillis = 300, easing = FastOutSlowInEasing)
+            ) + fadeIn(tween(600, delayMillis = 300))
+        ) {
+            ControlCard(
+                title = "Интенсивность\nартефактов",
+                badgeText = artifactLabel,
+                badgeColor = MaterialTheme.colorScheme.secondaryContainer,
+                badgeTextColor = MaterialTheme.colorScheme.onSecondaryContainer
+            ) {
+                M3ESlider(
+                    value = downscaleFactor,
+                    onValueChange = onDownscaleChange,
+                    onValueChangeFinished = onDownscaleChangeFinished,
+                    valueRange = 1f..8f,
+                    activeColor = MaterialTheme.colorScheme.secondary,
+                    inactiveColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    thumbColor = MaterialTheme.colorScheme.secondary
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(100.dp))
+    }
+}
+
+// ─── Meme page (text overlay) ───
+
+@Composable
+fun MemePageContent(
+    imageUri: Uri?,
+    originalBitmap: Bitmap?,
+    topText: String,
+    bottomText: String,
+    topTextSize: Float,
+    bottomTextSize: Float,
+    isVisible: Boolean,
+    onPickPhoto: () -> Unit,
+    onPreview: () -> Unit,
+    onTopTextChange: (String) -> Unit,
+    onBottomTextChange: (String) -> Unit,
+    onTopTextSizeChange: (Float) -> Unit,
+    onBottomTextSizeChange: (Float) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 22.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Photo with meme text overlay
+        AnimatedVisibility(
+            visible = isVisible,
+            enter = scaleIn(
+                initialScale = 0.8f,
+                animationSpec = tween(600, delayMillis = 100, easing = FastOutSlowInEasing)
+            ) + fadeIn(tween(600, delayMillis = 100))
+        ) {
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                MorphingImageButton(
+                    imageUri = imageUri,
+                    displayBitmap = originalBitmap,
+                    onPickPhoto = onPickPhoto,
+                    onPreview = onPreview,
+                    overlayContent = if (originalBitmap != null) {
+                        {
+                            if (topText.isNotBlank()) {
+                                MemeTextOverlay(
+                                    text = topText.uppercase(),
+                                    fontSize = topTextSize,
+                                    modifier = Modifier
+                                        .align(Alignment.TopCenter)
+                                        .padding(top = 16.dp, start = 8.dp, end = 8.dp)
+                                )
+                            }
+                            if (bottomText.isNotBlank()) {
+                                MemeTextOverlay(
+                                    text = bottomText.uppercase(),
+                                    fontSize = bottomTextSize,
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .padding(bottom = 16.dp, start = 8.dp, end = 8.dp)
+                                )
+                            }
+                        }
+                    } else null
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(26.dp))
+
+        // Top text input card
+        AnimatedVisibility(
+            visible = isVisible,
+            enter = slideInVertically(
+                initialOffsetY = { it / 2 },
+                animationSpec = tween(600, delayMillis = 200, easing = FastOutSlowInEasing)
+            ) + fadeIn(tween(600, delayMillis = 200))
+        ) {
+            TextInputCard(
+                title = "Верхний текст",
+                text = topText,
+                onTextChange = onTopTextChange,
+                textSize = topTextSize,
+                onDecrease = { onTopTextSizeChange((topTextSize - 4f).coerceAtLeast(16f)) },
+                onIncrease = { onTopTextSizeChange((topTextSize + 4f).coerceAtMost(64f)) }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(18.dp))
+
+        // Bottom text input card
+        AnimatedVisibility(
+            visible = isVisible,
+            enter = slideInVertically(
+                initialOffsetY = { it / 2 },
+                animationSpec = tween(600, delayMillis = 300, easing = FastOutSlowInEasing)
+            ) + fadeIn(tween(600, delayMillis = 300))
+        ) {
+            TextInputCard(
+                title = "Нижний текст",
+                text = bottomText,
+                onTextChange = onBottomTextChange,
+                textSize = bottomTextSize,
+                onDecrease = { onBottomTextSizeChange((bottomTextSize - 4f).coerceAtLeast(16f)) },
+                onIncrease = { onBottomTextSizeChange((bottomTextSize + 4f).coerceAtMost(64f)) }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(100.dp))
+    }
+}
+
+// ─── Text input card for meme page ───
+
+@Composable
+fun TextInputCard(
+    title: String,
+    text: String,
+    onTextChange: (String) -> Unit,
+    textSize: Float,
+    onDecrease: () -> Unit,
+    onIncrease: () -> Unit
+) {
+    val context = LocalContext.current
+
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        shape = RoundedCornerShape(22.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedTextField(
+                value = text,
+                onValueChange = onTextChange,
+                placeholder = { Text("Текст...") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                singleLine = true
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Decrease text size
+                IconButton(onClick = {
+                    performHapticTick(context)
+                    onDecrease()
+                }) {
+                    Text(
+                        "тТ",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // Size indicator
+                Text(
+                    "${textSize.toInt()}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                // Increase text size
+                IconButton(onClick = {
+                    performHapticTick(context)
+                    onIncrease()
+                }) {
+                    Text(
+                        "ТТ",
+                        fontWeight = FontWeight.Black,
+                        fontSize = 20.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ─── Meme text overlay (white fill + black stroke) ───
+
+@Composable
+fun MemeTextOverlay(text: String, fontSize: Float, modifier: Modifier = Modifier) {
+    val density = LocalDensity.current
+    val strokeWidthPx = with(density) { (fontSize * 0.1f).sp.toPx() }
+
+    Box(modifier = modifier) {
+        // Black stroke (outline)
+        Text(
+            text = text,
+            style = TextStyle(
+                fontSize = fontSize.sp,
+                fontWeight = FontWeight.Black,
+                color = Color.Black,
+                drawStyle = Stroke(width = strokeWidthPx, join = StrokeJoin.Round)
+            ),
+            textAlign = TextAlign.Center
+        )
+        // White fill
+        Text(
+            text = text,
+            style = TextStyle(
+                fontSize = fontSize.sp,
+                fontWeight = FontWeight.Black,
+                color = Color.White
+            ),
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+// ─── Full-screen image preview overlay ───
+
+@Composable
+fun FullScreenPreview(
+    bitmap: Bitmap,
+    topText: String = "",
+    bottomText: String = "",
+    topTextSize: Float = 32f,
+    bottomTextSize: Float = 32f,
+    onDismiss: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.92f))
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() }
+            ) { onDismiss() }
+            .zIndex(100f),
+        contentAlignment = Alignment.Center
+    ) {
+        val aspectRatio = bitmap.width.toFloat() / bitmap.height.toFloat()
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp)
+                .aspectRatio(aspectRatio)
+        ) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = "Предпросмотр",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit
+            )
+            if (topText.isNotBlank()) {
+                MemeTextOverlay(
+                    text = topText.uppercase(),
+                    fontSize = topTextSize * 1.2f,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 16.dp, start = 12.dp, end = 12.dp)
+                )
+            }
+            if (bottomText.isNotBlank()) {
+                MemeTextOverlay(
+                    text = bottomText.uppercase(),
+                    fontSize = bottomTextSize * 1.2f,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 16.dp, start = 12.dp, end = 12.dp)
+                )
+            }
+        }
+    }
+}
+
+// ─── Native M3E Slider ───
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -488,9 +1010,13 @@ fun M3ESlider(
 @Composable
 fun MorphingImageButton(
     imageUri: Uri?,
-    processedBitmap: Bitmap?,
-    onClick: () -> Unit
+    displayBitmap: Bitmap?,
+    onPickPhoto: () -> Unit,
+    onPreview: () -> Unit = {},
+    overlayContent: @Composable (BoxScope.() -> Unit)? = null
 ) {
+    val context = LocalContext.current
+
     // Slow rotation for empty state only
     val infiniteTransition = rememberInfiniteTransition(label = "rotate")
     val rotation by infiniteTransition.animateFloat(
@@ -507,7 +1033,10 @@ fun MorphingImageButton(
     var isPressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.93f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
         label = "scale"
     )
 
@@ -516,40 +1045,55 @@ fun MorphingImageButton(
     val m3Shape = remember { createM3Shape(shapeIndex) }
     val squircleShape = RoundedCornerShape(28.dp)
     val hasImage = imageUri != null
+    val hasBitmap = displayBitmap != null
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(1f) // Ensure it stays perfectly round/proportional
+            .aspectRatio(1f)
             .scale(scale)
             .then(if (!hasImage) Modifier.rotate(rotation) else Modifier)
             .clip(if (hasImage) squircleShape else m3Shape)
             .background(MaterialTheme.colorScheme.primaryContainer)
-            .pointerInput(Unit) {
+            .pointerInput(hasImage, hasBitmap) {
                 detectTapGestures(
                     onPress = {
                         isPressed = true
                         tryAwaitRelease()
                         isPressed = false
-                        onClick()
+                    },
+                    onTap = {
+                        if (hasBitmap) onPreview() else onPickPhoto()
+                    },
+                    onLongPress = {
+                        if (hasBitmap) {
+                            performHapticTick(context)
+                            onPickPhoto()
+                        }
                     }
                 )
             },
         contentAlignment = Alignment.Center
     ) {
-        if (processedBitmap != null) {
+        if (displayBitmap != null) {
             Image(
-                bitmap = processedBitmap.asImageBitmap(),
-                contentDescription = "Обработанное фото",
+                bitmap = displayBitmap.asImageBitmap(),
+                contentDescription = "Фото",
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
             )
+            overlayContent?.invoke(this)
         } else if (imageUri != null) {
             Box(
-                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(modifier = Modifier.size(48.dp), color = MaterialTheme.colorScheme.primary)
+                CircularProgressIndicator(
+                    modifier = Modifier.size(48.dp),
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
         } else {
             // Counter-rotate the text so it stays readable
@@ -574,7 +1118,11 @@ fun MorphingSaveButton(
 ) {
     val pillPolygon = remember { RoundedPolygon.circle() }
     val cookiePolygon = remember {
-        RoundedPolygon.star(numVerticesPerRadius = 9, innerRadius = 0.8f, rounding = CornerRounding(radius = 0.2f))
+        RoundedPolygon.star(
+            numVerticesPerRadius = 9,
+            innerRadius = 0.8f,
+            rounding = CornerRounding(radius = 0.2f)
+        )
     }
     val morph = remember { Morph(pillPolygon, cookiePolygon) }
 
@@ -586,7 +1134,11 @@ fun MorphingSaveButton(
 
     val morphShape = remember(morphProgress) {
         object : Shape {
-            override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+            override fun createOutline(
+                size: Size,
+                layoutDirection: LayoutDirection,
+                density: Density
+            ): Outline {
                 val matrix = android.graphics.Matrix()
                 matrix.setScale(size.width / 2f, size.height / 2f)
                 matrix.postTranslate(size.width / 2f, size.height / 2f)
@@ -604,7 +1156,12 @@ fun MorphingSaveButton(
             .clickable(enabled = !isSaving) { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        Icon(Icons.Rounded.SaveAlt, "Сохранить", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(28.dp))
+        Icon(
+            Icons.Rounded.SaveAlt,
+            "Сохранить",
+            tint = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.size(28.dp)
+        )
     }
 }
 
@@ -619,12 +1176,19 @@ fun ControlCard(
     content: @Composable () -> Unit
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
         shape = RoundedCornerShape(22.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
                 Spacer(modifier = Modifier.weight(1f))
                 Box(
                     modifier = Modifier
@@ -632,7 +1196,12 @@ fun ControlCard(
                         .background(badgeColor)
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
-                    Text(badgeText, style = MaterialTheme.typography.labelLarge, color = badgeTextColor, fontWeight = FontWeight.Bold)
+                    Text(
+                        badgeText,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = badgeTextColor,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
             Spacer(modifier = Modifier.height(12.dp))
