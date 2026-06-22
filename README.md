@@ -47,9 +47,18 @@
 После завершения сборки готовый APK-файл для установки на телефон будет находиться по пути:
 `shakal_compose/app/build/outputs/apk/debug/app-debug.apk`
 
+## ЛИБО просто скачайте готовый апк в релизах
 ---
 
 ## 📦 Структура репозитория
 
 - `shakal_compose/` — современная рабочая версия приложения на Jetpack Compose (Kotlin).
 - `md3shakal/` — старая версия приложения на Flutter.
+
+---
+### делал ридми не я а кое кто нечеловек потому что я описывать не умею
+
+
+# скриншоты с приложения
+<img width="1080" height="2400" alt="Screenshot_20260622-163621" src="https://github.com/user-attachments/assets/3f1b97d1-81c5-4034-a75c-5ca1adc1a66c" />
+<img width="1080" height="2400" alt="Screenshot_20260622-163609" src="https://github.com/user-attachments/assets/b76bf2fe-d052-4531-8bce-65015d9c518e" />
