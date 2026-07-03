@@ -22,6 +22,10 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.ScrollState
+
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -163,6 +167,38 @@ class CircularRevealShape(
 
 // ─── Activity ───
 
+
+class AppState {
+    var shakalImageUri by androidx.compose.runtime.mutableStateOf<Uri?>(null)
+    var processedBitmap by androidx.compose.runtime.mutableStateOf<Bitmap?>(null)
+    var quality by androidx.compose.runtime.mutableFloatStateOf(50f)
+    var downscaleFactor by androidx.compose.runtime.mutableFloatStateOf(5.2f)
+    var isProcessing by androidx.compose.runtime.mutableStateOf(false)
+    var shakalHasProcessedOnce by androidx.compose.runtime.mutableStateOf(false)
+    var prevQualityStep by androidx.compose.runtime.mutableIntStateOf(50)
+    var prevDownscaleStep by androidx.compose.runtime.mutableIntStateOf(5)
+
+    var memeImageUri by androidx.compose.runtime.mutableStateOf<Uri?>(null)
+    var memeBitmap by androidx.compose.runtime.mutableStateOf<Bitmap?>(null)
+    var topText by androidx.compose.runtime.mutableStateOf("")
+    var bottomText by androidx.compose.runtime.mutableStateOf("")
+    var topTextSize by androidx.compose.runtime.mutableFloatStateOf(32f)
+    var bottomTextSize by androidx.compose.runtime.mutableFloatStateOf(32f)
+
+    var isSaving by androidx.compose.runtime.mutableStateOf(false)
+    var showFullScreenPreview by androidx.compose.runtime.mutableStateOf(false)
+    var previewBitmap by androidx.compose.runtime.mutableStateOf<Bitmap?>(null)
+
+    var isVisible by androidx.compose.runtime.mutableStateOf(false)
+
+    var shakalShapeIndex by androidx.compose.runtime.mutableIntStateOf(kotlin.random.Random.nextInt(0, 8))
+    var memeShapeIndex by androidx.compose.runtime.mutableIntStateOf(kotlin.random.Random.nextInt(0, 8))
+}
+
+@Composable
+fun rememberAppState() = remember { AppState() }
+
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -175,11 +211,31 @@ class MainActivity : ComponentActivity() {
             val coroutineScope = rememberCoroutineScope()
             var currentPage by remember { mutableIntStateOf(0) }
 
+            val appState = rememberAppState()
+            val pagerState = rememberPagerState(initialPage = currentPage, pageCount = { 2 })
+            val shakalScrollState = rememberScrollState()
+            val memeScrollState = rememberScrollState()
+            val infiniteTransition = rememberInfiniteTransition(label = "rotate")
+            val globalRotation by infiniteTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(30000, easing = LinearEasing),
+                    repeatMode = RepeatMode.Restart
+                ),
+                label = "rotation"
+            )
+
             Box(modifier = Modifier.fillMaxSize()) {
                 // Base layer
                 ShakalTheme(darkTheme = isDarkTheme) {
                     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
                         ShakalApp(
+                            appState = appState,
+                            pagerState = pagerState,
+                            shakalScrollState = shakalScrollState,
+                            memeScrollState = memeScrollState,
+                            globalRotation = globalRotation,
                             isDarkTheme = isDarkTheme,
                             onThemeToggle = { offset ->
                                 if (!isRevealing) {
@@ -197,7 +253,6 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             },
-                            initialPage = currentPage,
                             onPageChanged = { currentPage = it }
                         )
                     }
@@ -221,9 +276,13 @@ class MainActivity : ComponentActivity() {
                                 color = MaterialTheme.colorScheme.surface
                             ) {
                                 ShakalApp(
+                                    appState = appState,
+                                    pagerState = pagerState,
+                                    shakalScrollState = shakalScrollState,
+                                    memeScrollState = memeScrollState,
+                                    globalRotation = globalRotation,
                                     isDarkTheme = revealToDark,
                                     onThemeToggle = {},
-                                    initialPage = currentPage,
                                     onPageChanged = {}
                                 )
                             }
@@ -240,14 +299,18 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShakalApp(
+    appState: AppState,
+    pagerState: androidx.compose.foundation.pager.PagerState,
+    shakalScrollState: androidx.compose.foundation.ScrollState,
+    memeScrollState: androidx.compose.foundation.ScrollState,
+    globalRotation: Float,
     isDarkTheme: Boolean,
     onThemeToggle: (Offset) -> Unit,
-    initialPage: Int = 0,
     onPageChanged: (Int) -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { 2 })
+
 
     // Sync page changes upward
     LaunchedEffect(pagerState.currentPage) {
@@ -255,40 +318,40 @@ fun ShakalApp(
     }
 
     // ── Shakal page state ──
-    var shakalImageUri by remember { mutableStateOf<Uri?>(null) }
-    var processedBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    var quality by remember { mutableFloatStateOf(50f) }
-    var downscaleFactor by remember { mutableFloatStateOf(5.2f) }
-    var isProcessing by remember { mutableStateOf(false) }
-    var shakalHasProcessedOnce by remember { mutableStateOf(false) }
-    var prevQualityStep by remember { mutableIntStateOf(50) }
-    var prevDownscaleStep by remember { mutableIntStateOf(5) }
+
+
+
+
+
+
+
+
 
     // ── Meme page state ──
-    var memeImageUri by remember { mutableStateOf<Uri?>(null) }
-    var memeBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    var topText by remember { mutableStateOf("") }
-    var bottomText by remember { mutableStateOf("") }
-    var topTextSize by remember { mutableFloatStateOf(32f) }
-    var bottomTextSize by remember { mutableFloatStateOf(32f) }
+
+
+
+
+
+
 
     // ── Shared state ──
-    var isSaving by remember { mutableStateOf(false) }
-    var showFullScreenPreview by remember { mutableStateOf(false) }
-    var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
+
+
+
 
     // Cascade animation
-    var isVisible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { isVisible = true }
+
+    LaunchedEffect(Unit) { appState.isVisible = true }
 
     // ── Photo pickers ──
     val shakalPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia(),
         onResult = { uri ->
             if (uri != null) {
-                shakalImageUri = uri
-                processedBitmap = null
-                shakalHasProcessedOnce = false
+                appState.shakalImageUri = uri
+                appState.processedBitmap = null
+                appState.shakalHasProcessedOnce = false
             }
         }
     )
@@ -297,9 +360,9 @@ fun ShakalApp(
         contract = ActivityResultContracts.PickVisualMedia(),
         onResult = { uri ->
             if (uri != null) {
-                memeImageUri = uri
+                appState.memeImageUri = uri
                 coroutineScope.launch {
-                    memeBitmap = MemeProcessor.loadBitmap(context, uri)
+                    appState.memeBitmap = MemeProcessor.loadBitmap(context, uri)
                 }
             }
         }
@@ -318,49 +381,49 @@ fun ShakalApp(
     }
 
     fun triggerShakalProcessing() {
-        shakalImageUri?.let { uri ->
+        appState.shakalImageUri?.let { uri ->
             coroutineScope.launch {
-                isProcessing = true
-                processedBitmap = ImageProcessor.processImage(context, uri, downscaleFactor, quality.toInt())
-                isProcessing = false
-                shakalHasProcessedOnce = true
+                appState.isProcessing = true
+                appState.processedBitmap = ImageProcessor.processImage(context, uri, appState.downscaleFactor, appState.quality.toInt())
+                appState.isProcessing = false
+                appState.shakalHasProcessedOnce = true
             }
         }
     }
 
     // ── Save logic ──
     val showSaveButton = when (pagerState.currentPage) {
-        0 -> shakalHasProcessedOnce && processedBitmap != null
-        1 -> memeImageUri != null && (topText.isNotBlank() || bottomText.isNotBlank())
+        0 -> appState.shakalHasProcessedOnce && appState.processedBitmap != null
+        1 -> appState.memeImageUri != null && (appState.topText.isNotBlank() || appState.bottomText.isNotBlank())
         else -> false
     }
 
     fun onSave() {
         when (pagerState.currentPage) {
             0 -> {
-                processedBitmap?.let { bmp ->
+                appState.processedBitmap?.let { bmp ->
                     coroutineScope.launch {
-                        isSaving = true
+                        appState.isSaving = true
                         delay(600)
                         val success = ImageProcessor.saveImageToGallery(context, bmp)
-                        isSaving = false
+                        appState.isSaving = false
                         Toast.makeText(context, if (success) "Сохранено!" else "Ошибка", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
             1 -> {
-                memeImageUri?.let { uri ->
+                appState.memeImageUri?.let { uri ->
                     coroutineScope.launch {
-                        isSaving = true
+                        appState.isSaving = true
                         delay(600)
-                        val result = MemeProcessor.renderMeme(context, uri, topText, bottomText, topTextSize, bottomTextSize)
+                        val result = MemeProcessor.renderMeme(context, uri, appState.topText, appState.bottomText, appState.topTextSize, appState.bottomTextSize)
                         if (result != null) {
                             val success = ImageProcessor.saveImageToGallery(context, result)
                             Toast.makeText(context, if (success) "Сохранено!" else "Ошибка", Toast.LENGTH_SHORT).show()
                         } else {
                             Toast.makeText(context, "Ошибка", Toast.LENGTH_SHORT).show()
                         }
-                        isSaving = false
+                        appState.isSaving = false
                     }
                 }
             }
@@ -425,7 +488,7 @@ fun ShakalApp(
                         exit = scaleOut() + fadeOut()
                     ) {
                         MorphingSaveButton(
-                            isSaving = isSaving,
+                            isSaving = appState.isSaving,
                             onClick = { onSave() }
                         )
                     }
@@ -439,7 +502,7 @@ fun ShakalApp(
             ) {
                 // Header
                 AnimatedVisibility(
-                    visible = isVisible,
+                    visible = appState.isVisible,
                     enter = slideInVertically(
                         initialOffsetY = { it / 2 },
                         animationSpec = tween(600, easing = FastOutSlowInEasing)
@@ -488,56 +551,62 @@ fun ShakalApp(
                 ) { page ->
                     when (page) {
                         0 -> ShakalPageContent(
-                            imageUri = shakalImageUri,
-                            processedBitmap = processedBitmap,
-                            quality = quality,
-                            downscaleFactor = downscaleFactor,
-                            isVisible = isVisible,
+                            imageUri = appState.shakalImageUri,
+                            processedBitmap = appState.processedBitmap,
+                            quality = appState.quality,
+                            downscaleFactor = appState.downscaleFactor,
+                            isVisible = appState.isVisible,
                             onPickPhoto = ::pickShakalPhoto,
                             onPreview = {
-                                processedBitmap?.let {
-                                    previewBitmap = it
-                                    showFullScreenPreview = true
+                                appState.processedBitmap?.let {
+                                    appState.previewBitmap = it
+                                    appState.showFullScreenPreview = true
                                 }
                             },
                             onQualityChange = { newVal ->
-                                quality = newVal
+                                appState.quality = newVal
                                 val step = newVal.toInt()
-                                if (step != prevQualityStep) {
-                                    prevQualityStep = step
+                                if (step != appState.prevQualityStep) {
+                                    appState.prevQualityStep = step
                                     performHapticTick(context)
                                 }
                             },
                             onQualityChangeFinished = ::triggerShakalProcessing,
                             onDownscaleChange = { newVal ->
-                                downscaleFactor = newVal
+                                appState.downscaleFactor = newVal
                                 val step = newVal.toInt()
-                                if (step != prevDownscaleStep) {
-                                    prevDownscaleStep = step
+                                if (step != appState.prevDownscaleStep) {
+                                    appState.prevDownscaleStep = step
                                     performHapticTick(context)
                                 }
                             },
+                            shapeIndex = appState.shakalShapeIndex,
+                            scrollState = shakalScrollState,
+                            globalRotation = globalRotation,
                             onDownscaleChangeFinished = ::triggerShakalProcessing
                         )
                         1 -> MemePageContent(
-                            imageUri = memeImageUri,
-                            originalBitmap = memeBitmap,
-                            topText = topText,
-                            bottomText = bottomText,
-                            topTextSize = topTextSize,
-                            bottomTextSize = bottomTextSize,
-                            isVisible = isVisible,
+                            imageUri = appState.memeImageUri,
+                            originalBitmap = appState.memeBitmap,
+                            topText = appState.topText,
+                            bottomText = appState.bottomText,
+                            topTextSize = appState.topTextSize,
+                            bottomTextSize = appState.bottomTextSize,
+                            isVisible = appState.isVisible,
                             onPickPhoto = ::pickMemePhoto,
                             onPreview = {
-                                memeBitmap?.let {
-                                    previewBitmap = it
-                                    showFullScreenPreview = true
+                                appState.memeBitmap?.let {
+                                    appState.previewBitmap = it
+                                    appState.showFullScreenPreview = true
                                 }
                             },
-                            onTopTextChange = { topText = it },
-                            onBottomTextChange = { bottomText = it },
-                            onTopTextSizeChange = { topTextSize = it },
-                            onBottomTextSizeChange = { bottomTextSize = it }
+                            onTopTextChange = { appState.topText = it },
+                            onBottomTextChange = { appState.bottomText = it },
+                            onTopTextSizeChange = { appState.topTextSize = it },
+                            shapeIndex = appState.memeShapeIndex,
+                            scrollState = memeScrollState,
+                            globalRotation = globalRotation,
+                            onBottomTextSizeChange = { appState.bottomTextSize = it }
                         )
                     }
                 }
@@ -545,20 +614,20 @@ fun ShakalApp(
         }
 
         // Full-screen preview overlay
-        if (showFullScreenPreview && previewBitmap != null) {
+        if (appState.showFullScreenPreview && appState.previewBitmap != null) {
             FullScreenPreview(
-                bitmap = previewBitmap!!,
-                topText = if (pagerState.currentPage == 1) topText else "",
-                bottomText = if (pagerState.currentPage == 1) bottomText else "",
-                topTextSize = topTextSize,
-                bottomTextSize = bottomTextSize,
-                onDismiss = { showFullScreenPreview = false }
+                bitmap = appState.previewBitmap!!,
+                topText = if (pagerState.currentPage == 1) appState.topText else "",
+                bottomText = if (pagerState.currentPage == 1) appState.bottomText else "",
+                topTextSize = appState.topTextSize,
+                bottomTextSize = appState.bottomTextSize,
+                onDismiss = { appState.showFullScreenPreview = false }
             )
         }
     }
 }
 
-// ─── Shakal page (quality degradation) ───
+// ─── Shakal page (appState.quality degradation) ───
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -568,6 +637,9 @@ fun ShakalPageContent(
     quality: Float,
     downscaleFactor: Float,
     isVisible: Boolean,
+    shapeIndex: Int,
+    scrollState: androidx.compose.foundation.ScrollState,
+    globalRotation: Float,
     onPickPhoto: () -> Unit,
     onPreview: () -> Unit,
     onQualityChange: (Float) -> Unit,
@@ -579,7 +651,7 @@ fun ShakalPageContent(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 22.dp)
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
     ) {
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -595,6 +667,8 @@ fun ShakalPageContent(
                 MorphingImageButton(
                     imageUri = imageUri,
                     displayBitmap = processedBitmap,
+                    shapeIndex = shapeIndex,
+                    globalRotation = globalRotation,
                     onPickPhoto = onPickPhoto,
                     onPreview = onPreview
                 )
@@ -695,6 +769,9 @@ fun MemePageContent(
     topTextSize: Float,
     bottomTextSize: Float,
     isVisible: Boolean,
+    shapeIndex: Int,
+    scrollState: androidx.compose.foundation.ScrollState,
+    globalRotation: Float,
     onPickPhoto: () -> Unit,
     onPreview: () -> Unit,
     onTopTextChange: (String) -> Unit,
@@ -706,7 +783,7 @@ fun MemePageContent(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 22.dp)
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
     ) {
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -722,6 +799,8 @@ fun MemePageContent(
                 MorphingImageButton(
                     imageUri = imageUri,
                     displayBitmap = originalBitmap,
+                    shapeIndex = shapeIndex,
+                    globalRotation = globalRotation,
                     onPickPhoto = onPickPhoto,
                     onPreview = onPreview,
                     overlayContent = if (originalBitmap != null) {
@@ -1011,23 +1090,13 @@ fun M3ESlider(
 fun MorphingImageButton(
     imageUri: Uri?,
     displayBitmap: Bitmap?,
+    shapeIndex: Int,
+    globalRotation: Float,
     onPickPhoto: () -> Unit,
     onPreview: () -> Unit = {},
     overlayContent: @Composable (BoxScope.() -> Unit)? = null
 ) {
     val context = LocalContext.current
-
-    // Slow rotation for empty state only
-    val infiniteTransition = rememberInfiniteTransition(label = "rotate")
-    val rotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(30000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "rotation"
-    )
 
     // Press physics
     var isPressed by remember { mutableStateOf(false) }
@@ -1041,7 +1110,7 @@ fun MorphingImageButton(
     )
 
     // Random M3E shape
-    val shapeIndex = remember { Random.nextInt(0, 8) }
+
     val m3Shape = remember { createM3Shape(shapeIndex) }
     val squircleShape = RoundedCornerShape(28.dp)
     val hasImage = imageUri != null
@@ -1052,7 +1121,7 @@ fun MorphingImageButton(
             .fillMaxWidth()
             .aspectRatio(1f)
             .scale(scale)
-            .then(if (!hasImage) Modifier.rotate(rotation) else Modifier)
+            .then(if (!hasImage) Modifier.rotate(globalRotation) else Modifier)
             .clip(if (hasImage) squircleShape else m3Shape)
             .background(MaterialTheme.colorScheme.primaryContainer)
             .pointerInput(hasImage, hasBitmap) {
@@ -1103,7 +1172,7 @@ fun MorphingImageButton(
                 fontWeight = FontWeight.Black,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.rotate(-rotation)
+                modifier = Modifier.rotate(-globalRotation)
             )
         }
     }
