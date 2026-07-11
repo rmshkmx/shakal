@@ -2,6 +2,8 @@ package com.shakal.app
 
 import android.content.Context
 import android.graphics.Bitmap
+import androidx.exifinterface.media.ExifInterface
+import android.graphics.Matrix
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
@@ -18,9 +20,34 @@ object MemeProcessor {
 
     suspend fun loadBitmap(context: Context, uri: Uri): Bitmap? = withContext(Dispatchers.IO) {
         try {
-            val inputStream = context.contentResolver.openInputStream(uri) ?: return@withContext null
-            val bitmap = BitmapFactory.decodeStream(inputStream)
+            var inputStream = context.contentResolver.openInputStream(uri) ?: return@withContext null
+            var bitmap = BitmapFactory.decodeStream(inputStream)
             inputStream.close()
+
+            if (bitmap != null) {
+                val stream = context.contentResolver.openInputStream(uri)
+                if (stream != null) {
+                    val exif = ExifInterface(stream)
+                    val orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+                    stream.close()
+
+                    val matrix = Matrix()
+                    when (orientation) {
+                        ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+                        ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+                        ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+                        ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.preScale(-1f, 1f)
+                        ExifInterface.ORIENTATION_FLIP_VERTICAL -> {
+                            matrix.postRotate(180f)
+                            matrix.preScale(-1f, 1f)
+                        }
+                    }
+                    if (orientation != ExifInterface.ORIENTATION_NORMAL && orientation != ExifInterface.ORIENTATION_UNDEFINED) {
+                        bitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+                    }
+                }
+            }
+
             bitmap
         } catch (e: Exception) {
             e.printStackTrace()

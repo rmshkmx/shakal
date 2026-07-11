@@ -275,16 +275,25 @@ class MainActivity : ComponentActivity() {
                                     .clip(CircularRevealShape(themeClickOffset, currentRadius)),
                                 color = MaterialTheme.colorScheme.surface
                             ) {
-                                ShakalApp(
-                                    appState = appState,
-                                    pagerState = pagerState,
-                                    shakalScrollState = shakalScrollState,
-                                    memeScrollState = memeScrollState,
-                                    globalRotation = globalRotation,
-                                    isDarkTheme = revealToDark,
-                                    onThemeToggle = {},
-                                    onPageChanged = {}
-                                )
+                                Box(modifier = Modifier.fillMaxSize().pointerInput(Unit) {
+                                    awaitPointerEventScope {
+                                        while (true) {
+                                            val event = awaitPointerEvent()
+                                            event.changes.forEach { it.consume() }
+                                        }
+                                    }
+                                }) {
+                                    ShakalApp(
+                                        appState = appState,
+                                        pagerState = pagerState,
+                                        shakalScrollState = shakalScrollState,
+                                        memeScrollState = memeScrollState,
+                                        globalRotation = globalRotation,
+                                        isDarkTheme = revealToDark,
+                                        onThemeToggle = {},
+                                        onPageChanged = {}
+                                    )
+                                }
                             }
                         }
                     }

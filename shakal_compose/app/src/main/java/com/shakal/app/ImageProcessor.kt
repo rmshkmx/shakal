@@ -3,6 +3,7 @@ package com.shakal.app
 import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
+import androidx.exifinterface.media.ExifInterface
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.net.Uri
@@ -24,9 +25,33 @@ object ImageProcessor {
         quality: Int
     ): Bitmap? = withContext(Dispatchers.IO) {
         try {
-            val inputStream = context.contentResolver.openInputStream(uri) ?: return@withContext null
-            val originalBitmap = BitmapFactory.decodeStream(inputStream)
+            var inputStream = context.contentResolver.openInputStream(uri) ?: return@withContext null
+            var originalBitmap = BitmapFactory.decodeStream(inputStream)
             inputStream.close()
+
+            if (originalBitmap != null) {
+                val stream = context.contentResolver.openInputStream(uri)
+                if (stream != null) {
+                    val exif = ExifInterface(stream)
+                    val orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+                    stream.close()
+
+                    val matrix = Matrix()
+                    when (orientation) {
+                        ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+                        ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+                        ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+                        ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.preScale(-1f, 1f)
+                        ExifInterface.ORIENTATION_FLIP_VERTICAL -> {
+                            matrix.postRotate(180f)
+                            matrix.preScale(-1f, 1f)
+                        }
+                    }
+                    if (orientation != ExifInterface.ORIENTATION_NORMAL && orientation != ExifInterface.ORIENTATION_UNDEFINED) {
+                        originalBitmap = Bitmap.createBitmap(originalBitmap, 0, 0, originalBitmap.width, originalBitmap.height, matrix, true)
+                    }
+                }
+            }
 
             if (originalBitmap == null) return@withContext null
 
