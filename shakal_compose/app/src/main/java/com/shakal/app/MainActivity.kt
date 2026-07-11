@@ -44,6 +44,10 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asComposePath
@@ -203,13 +207,45 @@ class MainActivity : ComponentActivity() {
             var themeClickOffset by remember { mutableStateOf(Offset.Zero) }
             val revealProgress = remember { Animatable(0f) }
             var isRevealing by remember { mutableStateOf(false) }
-            var revealToDark by remember { mutableStateOf(false) }
             val coroutineScope = rememberCoroutineScope()
+            val graphicsLayer = rememberGraphicsLayer()
 
             val appState = rememberAppState()
 
-            Box(modifier = Modifier.fillMaxSize()) {
-                // Single instance of themed app
+            Box(modifier = Modifier
+                .fillMaxSize()
+                .drawWithContent {
+                    if (!isRevealing) {
+                        graphicsLayer.record {
+                            this@drawWithContent.drawContent()
+                        }
+                        drawContent()
+                    } else {
+                        // Draw the frozen old theme
+                        drawLayer(graphicsLayer)
+                        
+                        // Calculate maximum radius for the circle
+                        val screenW = size.width
+                        val screenH = size.height
+                        val dx = maxOf(themeClickOffset.x, screenW - themeClickOffset.x)
+                        val dy = maxOf(themeClickOffset.y, screenH - themeClickOffset.y)
+                        val maxRadius = kotlin.math.sqrt(dx * dx + dy * dy)
+                        val currentRadius = maxRadius * revealProgress.value
+
+                        // Clip the new theme with an expanding circle
+                        clipPath(Path().apply {
+                            addOval(Rect(
+                                left = themeClickOffset.x - currentRadius,
+                                top = themeClickOffset.y - currentRadius,
+                                right = themeClickOffset.x + currentRadius,
+                                bottom = themeClickOffset.y + currentRadius
+                            ))
+                        }) {
+                            this@drawWithContent.drawContent()
+                        }
+                    }
+                }
+            ) {
                 ShakalTheme(darkTheme = isDarkTheme) {
                     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
                         ShakalApp(
@@ -219,42 +255,19 @@ class MainActivity : ComponentActivity() {
                             onThemeToggle = { offset ->
                                 if (!isRevealing) {
                                     themeClickOffset = offset
-                                    revealToDark = !isDarkTheme
                                     coroutineScope.launch {
                                         isRevealing = true
+                                        isDarkTheme = !isDarkTheme // Instantly change the compose theme
                                         revealProgress.snapTo(0f)
                                         revealProgress.animateTo(
                                             targetValue = 1f,
                                             animationSpec = tween(500, easing = FastOutSlowInEasing)
                                         )
-                                        // Switch theme at the end of animation
-                                        isDarkTheme = revealToDark
                                         isRevealing = false
                                     }
                                 }
                             }
                         )
-                    }
-                }
-
-                // Circular reveal overlay — just a colored surface, not a second app
-                if (isRevealing) {
-                    ShakalTheme(darkTheme = revealToDark) {
-                        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                            val screenW = with(LocalDensity.current) { maxWidth.toPx() }
-                            val screenH = with(LocalDensity.current) { maxHeight.toPx() }
-                            val dx = max(themeClickOffset.x, screenW - themeClickOffset.x)
-                            val dy = max(themeClickOffset.y, screenH - themeClickOffset.y)
-                            val maxRadius = sqrt(dx * dx + dy * dy)
-                            val currentRadius = maxRadius * revealProgress.value
-
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(CircularRevealShape(themeClickOffset, currentRadius)),
-                                color = MaterialTheme.colorScheme.surface
-                            ) {}
-                        }
                     }
                 }
             }
