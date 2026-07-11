@@ -22,10 +22,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-
-import androidx.compose.foundation.pager.PagerState
-import androidx.compose.foundation.ScrollState
-
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -209,33 +205,16 @@ class MainActivity : ComponentActivity() {
             var isRevealing by remember { mutableStateOf(false) }
             var revealToDark by remember { mutableStateOf(false) }
             val coroutineScope = rememberCoroutineScope()
-            var currentPage by remember { mutableIntStateOf(0) }
 
             val appState = rememberAppState()
-            val pagerState = rememberPagerState(initialPage = currentPage, pageCount = { 2 })
-            val shakalScrollState = rememberScrollState()
-            val memeScrollState = rememberScrollState()
-            val infiniteTransition = rememberInfiniteTransition(label = "rotate")
-            val globalRotation by infiniteTransition.animateFloat(
-                initialValue = 0f,
-                targetValue = 360f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(30000, easing = LinearEasing),
-                    repeatMode = RepeatMode.Restart
-                ),
-                label = "rotation"
-            )
 
             Box(modifier = Modifier.fillMaxSize()) {
-                // Base layer
+                // Single instance of themed app
                 ShakalTheme(darkTheme = isDarkTheme) {
                     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
                         ShakalApp(
                             appState = appState,
-                            pagerState = pagerState,
-                            shakalScrollState = shakalScrollState,
-                            memeScrollState = memeScrollState,
-                            globalRotation = globalRotation,
+                            globalRotation = null, // Let ShakalApp manage its own rotation
                             isDarkTheme = isDarkTheme,
                             onThemeToggle = { offset ->
                                 if (!isRevealing) {
@@ -246,19 +225,19 @@ class MainActivity : ComponentActivity() {
                                         revealProgress.snapTo(0f)
                                         revealProgress.animateTo(
                                             targetValue = 1f,
-                                            animationSpec = tween(700, easing = FastOutSlowInEasing)
+                                            animationSpec = tween(500, easing = FastOutSlowInEasing)
                                         )
+                                        // Switch theme at the end of animation
                                         isDarkTheme = revealToDark
                                         isRevealing = false
                                     }
                                 }
-                            },
-                            onPageChanged = { currentPage = it }
+                            }
                         )
                     }
                 }
 
-                // Reveal overlay
+                // Circular reveal overlay — just a colored surface, not a second app
                 if (isRevealing) {
                     ShakalTheme(darkTheme = revealToDark) {
                         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -274,27 +253,7 @@ class MainActivity : ComponentActivity() {
                                     .fillMaxSize()
                                     .clip(CircularRevealShape(themeClickOffset, currentRadius)),
                                 color = MaterialTheme.colorScheme.surface
-                            ) {
-                                Box(modifier = Modifier.fillMaxSize().pointerInput(Unit) {
-                                    awaitPointerEventScope {
-                                        while (true) {
-                                            val event = awaitPointerEvent()
-                                            event.changes.forEach { it.consume() }
-                                        }
-                                    }
-                                }) {
-                                    ShakalApp(
-                                        appState = appState,
-                                        pagerState = pagerState,
-                                        shakalScrollState = shakalScrollState,
-                                        memeScrollState = memeScrollState,
-                                        globalRotation = globalRotation,
-                                        isDarkTheme = revealToDark,
-                                        onThemeToggle = {},
-                                        onPageChanged = {}
-                                    )
-                                }
-                            }
+                            ) {}
                         }
                     }
                 }
@@ -309,45 +268,30 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun ShakalApp(
     appState: AppState,
-    pagerState: androidx.compose.foundation.pager.PagerState,
-    shakalScrollState: androidx.compose.foundation.ScrollState,
-    memeScrollState: androidx.compose.foundation.ScrollState,
-    globalRotation: Float,
+    globalRotation: Float?, // null = manage internally
     isDarkTheme: Boolean,
-    onThemeToggle: (Offset) -> Unit,
-    onPageChanged: (Int) -> Unit = {}
+    onThemeToggle: (Offset) -> Unit
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
+    // Internal pager and scroll states — owned here, not shared with overlay
+    val pagerState = rememberPagerState(pageCount = { 2 })
+    val shakalScrollState = rememberScrollState()
+    val memeScrollState = rememberScrollState()
 
-    // Sync page changes upward
-    LaunchedEffect(pagerState.currentPage) {
-        onPageChanged(pagerState.currentPage)
-    }
-
-    // ── Shakal page state ──
-
-
-
-
-
-
-
-
-
-    // ── Meme page state ──
-
-
-
-
-
-
-
-    // ── Shared state ──
-
-
-
+    // Internal rotation if not provided
+    val infiniteTransition = rememberInfiniteTransition(label = "rotate")
+    val internalRotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(30000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "rotation"
+    )
+    val effectiveRotation = globalRotation ?: internalRotation
 
     // Cascade animation
 
@@ -591,7 +535,7 @@ fun ShakalApp(
                             },
                             shapeIndex = appState.shakalShapeIndex,
                             scrollState = shakalScrollState,
-                            globalRotation = globalRotation,
+                            globalRotation = effectiveRotation,
                             onDownscaleChangeFinished = ::triggerShakalProcessing
                         )
                         1 -> MemePageContent(
@@ -614,7 +558,7 @@ fun ShakalApp(
                             onTopTextSizeChange = { appState.topTextSize = it },
                             shapeIndex = appState.memeShapeIndex,
                             scrollState = memeScrollState,
-                            globalRotation = globalRotation,
+                            globalRotation = effectiveRotation,
                             onBottomTextSizeChange = { appState.bottomTextSize = it }
                         )
                     }
@@ -636,7 +580,7 @@ fun ShakalApp(
     }
 }
 
-// ─── Shakal page (appState.quality degradation) ───
+// ─── Shakal page (quality degradation) ───
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
