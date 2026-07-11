@@ -44,10 +44,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.clipPath
-import androidx.compose.ui.graphics.rememberGraphicsLayer
-import androidx.compose.ui.graphics.layer.drawLayer
-import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asComposePath
@@ -208,23 +205,63 @@ class MainActivity : ComponentActivity() {
             val revealProgress = remember { Animatable(0f) }
             var isRevealing by remember { mutableStateOf(false) }
             val coroutineScope = rememberCoroutineScope()
-            val graphicsLayer = rememberGraphicsLayer()
+
+            // Screenshot of old theme for circular reveal
+            var oldScreenBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
             val appState = rememberAppState()
 
-            Box(modifier = Modifier
-                .fillMaxSize()
-                .drawWithContent {
-                    if (!isRevealing) {
-                        graphicsLayer.record {
-                            this@drawWithContent.drawContent()
-                        }
-                        drawContent()
-                    } else {
-                        // Draw the frozen old theme
-                        drawLayer(graphicsLayer)
-                        
-                        // Calculate maximum radius for the circle
+            Box(modifier = Modifier.fillMaxSize()) {
+                // The single app instance — always renders with the CURRENT theme
+                ShakalTheme(darkTheme = isDarkTheme) {
+                    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
+                        ShakalApp(
+                            appState = appState,
+                            globalRotation = null,
+                            isDarkTheme = isDarkTheme,
+                            onThemeToggle = { offset ->
+                                if (!isRevealing) {
+                                    themeClickOffset = offset
+                                    // Capture current screen before switching
+                                    val rootView = window.decorView.rootView
+                                    try {
+                                        oldScreenBitmap = Bitmap.createBitmap(
+                                            rootView.width, rootView.height, Bitmap.Config.ARGB_8888
+                                        ).also { bmp ->
+                                            val canvas = android.graphics.Canvas(bmp)
+                                            rootView.draw(canvas)
+                                        }
+                                    } catch (_: Exception) {
+                                        oldScreenBitmap = null
+                                    }
+
+                                    // Switch the theme instantly
+                                    isDarkTheme = !isDarkTheme
+
+                                    // Animate the reveal
+                                    coroutineScope.launch {
+                                        isRevealing = true
+                                        revealProgress.snapTo(0f)
+                                        revealProgress.animateTo(
+                                            targetValue = 1f,
+                                            animationSpec = tween(500, easing = FastOutSlowInEasing)
+                                        )
+                                        isRevealing = false
+                                        oldScreenBitmap?.recycle()
+                                        oldScreenBitmap = null
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
+
+                // Old-theme screenshot overlay with circular cutout
+                if (isRevealing && oldScreenBitmap != null) {
+                    val bitmap = oldScreenBitmap!!
+                    Canvas(
+                        modifier = Modifier.fillMaxSize()
+                    ) {
                         val screenW = size.width
                         val screenH = size.height
                         val dx = maxOf(themeClickOffset.x, screenW - themeClickOffset.x)
@@ -232,41 +269,20 @@ class MainActivity : ComponentActivity() {
                         val maxRadius = kotlin.math.sqrt(dx * dx + dy * dy)
                         val currentRadius = maxRadius * revealProgress.value
 
-                        // Clip the new theme with an expanding circle
-                        clipPath(Path().apply {
-                            addOval(Rect(
-                                left = themeClickOffset.x - currentRadius,
-                                top = themeClickOffset.y - currentRadius,
-                                right = themeClickOffset.x + currentRadius,
-                                bottom = themeClickOffset.y + currentRadius
-                            ))
-                        }) {
-                            this@drawWithContent.drawContent()
-                        }
-                    }
-                }
-            ) {
-                ShakalTheme(darkTheme = isDarkTheme) {
-                    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
-                        ShakalApp(
-                            appState = appState,
-                            globalRotation = null, // Let ShakalApp manage its own rotation
-                            isDarkTheme = isDarkTheme,
-                            onThemeToggle = { offset ->
-                                if (!isRevealing) {
-                                    themeClickOffset = offset
-                                    coroutineScope.launch {
-                                        isRevealing = true
-                                        isDarkTheme = !isDarkTheme // Instantly change the compose theme
-                                        revealProgress.snapTo(0f)
-                                        revealProgress.animateTo(
-                                            targetValue = 1f,
-                                            animationSpec = tween(500, easing = FastOutSlowInEasing)
-                                        )
-                                        isRevealing = false
-                                    }
-                                }
-                            }
+                        // Draw the old screenshot
+                        drawImage(
+                            image = bitmap.asImageBitmap(),
+                            dstSize = androidx.compose.ui.unit.IntSize(
+                                screenW.toInt(), screenH.toInt()
+                            )
+                        )
+
+                        // Punch a hole where the new theme should show through
+                        drawCircle(
+                            color = Color.Transparent,
+                            radius = currentRadius,
+                            center = themeClickOffset,
+                            blendMode = androidx.compose.ui.graphics.BlendMode.Clear
                         )
                     }
                 }
@@ -350,7 +366,7 @@ fun ShakalApp(
         appState.shakalImageUri?.let { uri ->
             coroutineScope.launch {
                 appState.isProcessing = true
-                appState.processedBitmap = ImageProcessor.processImage(context, uri, appState.downscaleFactor, appState.quality.toInt())
+                appState.processedBitmap = ImageProcessor.processImage(context, uri, appState.downscaleFactor, (101 - appState.quality.toInt()).coerceIn(1, 100))
                 appState.isProcessing = false
                 appState.shakalHasProcessedOnce = true
             }
