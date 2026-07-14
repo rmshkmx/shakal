@@ -139,14 +139,35 @@ fun createM3Shape(index: Int): Shape {
 
 // ─── Haptic feedback helper ───
 
-fun performHapticTick(context: android.content.Context) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+private var lastHapticTime = 0L
+
+fun performHapticTick(context: android.content.Context, progress: Float = 0.5f) {
+    if (progress <= 0f) return
+
+    val currentTime = System.currentTimeMillis()
+    if (currentTime - lastHapticTime < 40L) return
+    lastHapticTime = currentTime
+
+    val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         val vm = context.getSystemService(android.content.Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-        vm?.defaultVibrator?.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK))
-    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        vm?.defaultVibrator
+    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        context.getSystemService(Vibrator::class.java)
+    } else {
         @Suppress("DEPRECATION")
-        val v = context.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? Vibrator
-        v?.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK))
+        context.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? Vibrator
+    }
+
+    if (vibrator == null) return
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && vibrator.hasAmplitudeControl()) {
+        val amplitude = (progress * 255).toInt().coerceIn(1, 255)
+        vibrator.vibrate(VibrationEffect.createOneShot(10L, amplitude))
+    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK))
+    } else {
+        @Suppress("DEPRECATION")
+        vibrator.vibrate(10L)
     }
 }
 
@@ -553,7 +574,8 @@ fun ShakalApp(
                                 val step = newVal.toInt()
                                 if (step != appState.prevQualityStep) {
                                     appState.prevQualityStep = step
-                                    performHapticTick(context)
+                                    val progress = (newVal - 1f) / 99f
+                                    performHapticTick(context, progress)
                                 }
                             },
                             onQualityChangeFinished = ::triggerShakalProcessing,
@@ -562,7 +584,8 @@ fun ShakalApp(
                                 val step = newVal.toInt()
                                 if (step != appState.prevDownscaleStep) {
                                     appState.prevDownscaleStep = step
-                                    performHapticTick(context)
+                                    val progress = (newVal - 1f) / 7f
+                                    performHapticTick(context, progress)
                                 }
                             },
                             shapeIndex = appState.shakalShapeIndex,
